@@ -8,7 +8,7 @@ const assert = std.debug.assert;
 
 const screenWidth = 800;
 const screenHeight = 450;
-const groundLevel = screenHeight; // / 2;
+const groundLevel = screenHeight / 2;
 
 var prng = std.Random.DefaultPrng.init(1);
 const random = prng.random();
@@ -22,6 +22,8 @@ const PhysicalCircle = struct {
     ball_elasticity: f32 = -0.3,
 
     fn tick(self: *PhysicalCircle) void {
+        self.velocity.x *= 0.1;
+        self.velocity.y *= 0.1;
         if (self.pos.y + self.radius < groundLevel) {
             self.velocity.y += gravity;
         } else {
@@ -35,18 +37,39 @@ const PhysicalCircle = struct {
     }
 };
 
+const JoinConnection = struct {
+    connected_joints: [2]usize,
+    squish_time: u8,
+    stretch_time: u8,
+    is_stretching: bool = true,
+    clock: u8 = 0,
+};
 const Creature = struct {
     joints: []PhysicalCircle,
-    connections: [][2]usize,
+    connections: []JoinConnection,
 
     fn tick(self: *Creature) void {
         for (self.joints) |*joint| {
             joint.tick();
         }
+        for (self.connections) |*connection| {
+            connection.clock += 1;
+            const max_time = if (connection.is_stretching) connection.stretch_time else connection.squish_time;
+            if (max_time == connection.clock) {
+                connection.clock = 0;
+                connection.is_stretching = !connection.is_stretching;
+            }
+            var joint_a = &self.joints[connection.connected_joints[0]];
+            const joint_b = &self.joints[connection.connected_joints[1]];
+            const dist = r.Vector2Distance(joint_a.pos, joint_b.pos);
+            const multiplier: f16 = 10 * if (connection.is_stretching) @as(f16, -1) else @as(f16, 2);
+            joint_a.velocity.y += (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
+            joint_a.velocity.x += (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
+        }
     }
     fn draw(self: Creature) void {
         for (self.connections) |connection| {
-            r.DrawLineEx(self.joints[connection[0]].pos, self.joints[connection[1]].pos, 5, r.BLACK);
+            r.DrawLineEx(self.joints[connection.connected_joints[0]].pos, self.joints[connection.connected_joints[1]].pos, if (connection.is_stretching) 5 else 10, r.BLACK);
         }
         for (self.joints) |joint| {
             joint.draw();
@@ -75,7 +98,7 @@ fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
         };
     }
 
-    var connections = std.ArrayList([2]usize).init(allocator);
+    var connections = std.ArrayList(JoinConnection).init(allocator);
     defer connections.shrinkAndFree(connections.items.len);
     var joints_visits = try arena_allocator.alloc(bool, joint_amount);
 
@@ -98,12 +121,16 @@ fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
 
         // If the two joints are already connected, skip
         for (connections.items) |connection| {
-            if (connection[0] == current_joint and connection[1] == next_joint) {
+            if (connection.connected_joints[0] == current_joint and connection.connected_joints[1] == next_joint) {
                 continue :graph_traversal;
             }
         }
 
-        try connections.append(.{ current_joint, next_joint });
+        try connections.append(.{
+            .connected_joints = .{ current_joint, next_joint },
+            .squish_time = random.uintAtMost(u8, 100),
+            .stretch_time = random.uintAtMost(u8, 100),
+        });
     }
 
     return Creature{ .joints = joints, .connections = connections.items };
@@ -121,14 +148,12 @@ pub fn main() !void {
     r.SetTargetFPS(60);
 
     var c = try makeRandomCreature(5, allocator);
+    defer c.deinit(allocator);
     var i: usize = 0;
     while (!r.WindowShouldClose()) : (i += 1) // Detect window close button or ESC key
     {
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
-
-        c.deinit(allocator);
-        c = try makeRandomCreature(random.intRangeAtMost(u8, 2, 7), allocator);
 
         c.tick();
         c.draw();
