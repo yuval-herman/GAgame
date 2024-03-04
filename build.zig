@@ -84,6 +84,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe_unit_tests.addIncludePath(.{ .path = "raylib/src" });
+    exe_unit_tests.linkLibrary(raylib catch unreachable);
 
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
