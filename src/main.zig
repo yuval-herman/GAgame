@@ -3,6 +3,7 @@ const r = @cImport({
     @cInclude("./raymath.h");
 });
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 const screenWidth = 800;
@@ -51,25 +52,32 @@ const Creature = struct {
             joint.draw();
         }
     }
+    fn deinit(self: *Creature, allocator: Allocator) void {
+        allocator.free(self.connections);
+        allocator.free(self.joints);
+    }
 };
 
 /// joint_amount must be bigger then 1.
-fn makeRandomCreature(joint_amount: u8, allocator: std.mem.Allocator) !Creature {
+fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
     assert(joint_amount > 1);
     const joints = try allocator.alloc(PhysicalCircle, joint_amount);
     for (joints) |*joint| {
         joint.* = PhysicalCircle{
-            .pos = .{
+            .pos = r.Vector2{
                 .x = random.float(f32) * screenWidth / 2 + screenWidth / 4,
                 .y = random.float(f32) * 300,
             },
             .ball_elasticity = -random.float(f32),
         };
     }
+
     var connections = std.ArrayList([2]usize).init(allocator);
     defer connections.shrinkAndFree(connections.items.len);
-    var joints_visits = try allocator.alloc(bool, joint_amount);
-    defer allocator.free(joints_visits);
+    var joints_visits = try arena_allocator.alloc(bool, joint_amount);
 
     @memset(joints_visits, false);
     var current_joint: usize = 0;
@@ -97,12 +105,14 @@ fn makeRandomCreature(joint_amount: u8, allocator: std.mem.Allocator) !Creature 
 
         try connections.append(.{ current_joint, next_joint });
     }
+
     return Creature{ .joints = joints, .connections = connections.items };
 }
 
 pub fn main() !void {
     var buffer: [10000]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
     const allocator = fba.allocator();
 
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
@@ -115,11 +125,11 @@ pub fn main() !void {
     while (!r.WindowShouldClose()) : (i += 1) // Detect window close button or ESC key
     {
         r.BeginDrawing();
-
         r.ClearBackground(r.RAYWHITE);
-        if (i % 90 == 0) {
-            c = try makeRandomCreature(random.intRangeAtMost(u8, 2, 7), allocator);
-        }
+
+        c.deinit(allocator);
+        c = try makeRandomCreature(random.intRangeAtMost(u8, 2, 7), allocator);
+
         c.tick();
         c.draw();
         // r.DrawText(@ptrCast(try std.fmt.bufPrintZ(&buffer, "{any}", .{c})), 0, 0, 20, r.LIGHTGRAY);
@@ -131,12 +141,18 @@ pub fn main() !void {
     }
 }
 
+const testing = std.testing;
 test "creatue memory leak" {
+    var buffer: [10000]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
     var c: Creature = undefined;
-    const allocator = std.testing.allocator;
-    for (0..100) |_| {
-        c = try makeRandomCreature(random.intRangeAtMost(u8, 2, 10), allocator);
-        allocator.free(c.joints);
-        allocator.free(c.connections);
-    }
+    try testing.expectEqual(0, fba.end_index);
+
+    c = try makeRandomCreature(2, allocator);
+
+    c.deinit(allocator);
+
+    try testing.expectEqual(0, fba.end_index);
 }
