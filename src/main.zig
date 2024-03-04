@@ -67,7 +67,9 @@ fn makeRandomCreature(joint_amount: u8, allocator: std.mem.Allocator) !Creature 
         };
     }
     var connections = std.ArrayList([2]usize).init(allocator);
+    defer connections.shrinkAndFree(connections.items.len);
     var joints_visits = try allocator.alloc(bool, joint_amount);
+    defer allocator.free(joints_visits);
 
     @memset(joints_visits, false);
     var current_joint: usize = 0;
@@ -93,12 +95,8 @@ fn makeRandomCreature(joint_amount: u8, allocator: std.mem.Allocator) !Creature 
             }
         }
 
-        var connection = try allocator.create([2]usize);
-        connection[0] = current_joint;
-        connection[1] = next_joint;
-        try connections.append(connection.*);
+        try connections.append(.{ current_joint, next_joint });
     }
-
     return Creature{ .joints = joints, .connections = connections.items };
 }
 
@@ -130,5 +128,15 @@ pub fn main() !void {
         r.DrawRectangle(0, groundLevel, screenWidth, screenHeight, r.BLACK);
 
         r.EndDrawing();
+    }
+}
+
+test "creatue memory leak" {
+    var c: Creature = undefined;
+    const allocator = std.testing.allocator;
+    for (0..100) |_| {
+        c = try makeRandomCreature(random.intRangeAtMost(u8, 2, 10), allocator);
+        allocator.free(c.joints);
+        allocator.free(c.connections);
     }
 }
