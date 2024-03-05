@@ -10,27 +10,29 @@ const screenWidth = 800;
 const screenHeight = 450;
 const groundLevel = screenHeight / 2;
 
-var prng = std.Random.DefaultPrng.init(1);
+var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
-const gravity = 0.3;
+const gravity = 0.6;
 
 const PhysicalCircle = struct {
     pos: r.Vector2 = r.Vector2{},
-    velocity: r.Vector2 = r.Vector2{},
+    force: r.Vector2 = r.Vector2{},
     radius: f16 = 10,
-    ball_elasticity: f32 = -0.3,
+    ball_elasticity: f32 = -1,
 
     fn tick(self: *PhysicalCircle) void {
-        self.velocity.x *= 0.1;
-        self.velocity.y *= 0.1;
+        self.force.x *= 0.1;
+        self.force.y *= 0.1;
         if (self.pos.y + self.radius < groundLevel) {
-            self.velocity.y += gravity;
+            self.force.y += gravity;
         } else {
-            self.velocity.y *= self.ball_elasticity;
+            if (self.force.y > 0) self.force.y *= self.ball_elasticity;
+            std.debug.print("x:{d}\n", .{self.force.x});
             self.pos.y = groundLevel - self.radius;
         }
-        self.pos = r.Vector2Add(self.pos, self.velocity);
+
+        self.pos = r.Vector2Add(self.pos, self.force);
     }
     fn draw(self: PhysicalCircle) void {
         r.DrawCircleV(self.pos, self.radius, r.RED);
@@ -60,10 +62,11 @@ const Creature = struct {
             }
             var joint_a = &self.joints[connection.connected_joints[0]];
             const joint_b = &self.joints[connection.connected_joints[1]];
+
             const dist = r.Vector2Distance(joint_a.pos, joint_b.pos);
             const multiplier: f16 = 10 * if (connection.is_stretching) @as(f16, -1) else @as(f16, 1);
-            joint_a.velocity.y += (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
-            joint_a.velocity.x += (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
+            joint_a.force.y += (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
+            joint_a.force.x += (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
         }
     }
     fn draw(self: Creature) void {
@@ -152,7 +155,7 @@ pub fn main() !void {
     defer r.CloseWindow();
     r.SetTargetFPS(60);
 
-    var c = try makeRandomCreature(5, allocator);
+    var c = try makeRandomCreature(2, allocator);
     defer c.deinit(allocator);
     var i: usize = 0;
     while (!r.WindowShouldClose()) : (i += 1) // Detect window close button or ESC key
