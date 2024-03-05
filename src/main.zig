@@ -67,6 +67,8 @@ const Creature = struct {
             const multiplier: f16 = 10 * if (connection.is_stretching) @as(f16, -1) else @as(f16, 1);
             joint_a.force.y += (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
             joint_a.force.x += (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
+            joint_b.force.y -= (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
+            joint_b.force.x -= (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
         }
     }
     fn draw(self: Creature) void {
@@ -155,7 +157,7 @@ pub fn main() !void {
     defer r.CloseWindow();
     r.SetTargetFPS(60);
 
-    var c = try makeRandomCreature(2, allocator);
+    var c = try makeRandomCreature(3, allocator);
     defer c.deinit(allocator);
     var i: usize = 0;
     while (!r.WindowShouldClose()) : (i += 1) // Detect window close button or ESC key
