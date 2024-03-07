@@ -20,18 +20,21 @@ const PhysicalCircle = struct {
     force: r.Vector2 = r.Vector2{},
     radius: f16 = 10,
     ball_elasticity: f32 = -1,
+    is_touching_ground: bool = false,
+
+    ball_traction: f32,
 
     fn tick(self: *PhysicalCircle) void {
         self.force.x *= 0.1;
         self.force.y *= 0.1;
         if (self.pos.y + self.radius < groundLevel) {
+            self.is_touching_ground = false;
             self.force.y += gravity;
         } else {
+            self.is_touching_ground = true;
             if (self.force.y > 0) self.force.y *= self.ball_elasticity;
-            std.debug.print("x:{d}\n", .{self.force.x});
             self.pos.y = groundLevel - self.radius;
         }
-
         self.pos = r.Vector2Add(self.pos, self.force);
     }
     fn draw(self: PhysicalCircle) void {
@@ -40,10 +43,12 @@ const PhysicalCircle = struct {
 };
 
 const JointConnection = struct {
-    connected_joints: [2]usize,
-    stretch_time: u8,
     is_stretching: bool = true,
     clock: u8 = 0,
+    connected_joints: [2]usize,
+
+    stretch_time: u8,
+    base_length: u16,
 };
 const Creature = struct {
     joints: []PhysicalCircle,
@@ -56,7 +61,7 @@ const Creature = struct {
         for (self.connections) |*connection| {
             connection.clock += 1;
             const max_time = connection.stretch_time;
-            if (max_time == connection.clock) {
+            if (max_time <= connection.clock) {
                 connection.clock = 0;
                 connection.is_stretching = !connection.is_stretching;
             }
@@ -64,11 +69,27 @@ const Creature = struct {
             const joint_b = &self.joints[connection.connected_joints[1]];
 
             const dist = r.Vector2Distance(joint_a.pos, joint_b.pos);
-            const multiplier: f16 = 10 * if (connection.is_stretching) @as(f16, -1) else @as(f16, 1);
+            const length_aim = @as(f32, @floatFromInt(connection.base_length)) * if (connection.is_stretching) @as(f16, 2) else @as(f16, 0.5);
+            const multiplier: f16 = 20 * if (@abs(dist) < length_aim) @as(f16, -1) else @as(f16, 1);
+
             joint_a.force.y += (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
             joint_a.force.x += (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
+            if (joint_a.is_touching_ground) {
+                const slide_vector = r.Vector2Scale(joint_b.force, 0.7);
+                joint_b.force.x += -slide_vector.x;
+                joint_b.force.y += -slide_vector.y;
+                joint_a.force.x -= slide_vector.x;
+                joint_a.force.y -= slide_vector.y;
+            }
             joint_b.force.y -= (joint_b.pos.y - joint_a.pos.y) / dist * multiplier;
             joint_b.force.x -= (joint_b.pos.x - joint_a.pos.x) / dist * multiplier;
+            if (joint_b.is_touching_ground) {
+                const slide_vector = r.Vector2Scale(joint_a.force, 0.7);
+                joint_a.force.x += -slide_vector.x;
+                joint_a.force.y += -slide_vector.y;
+                joint_b.force.x -= slide_vector.x;
+                joint_b.force.y -= slide_vector.y;
+            }
         }
     }
     fn draw(self: Creature) void {
@@ -99,6 +120,7 @@ fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
     const joints = try allocator.alloc(PhysicalCircle, joint_amount);
     for (joints) |*joint| {
         joint.* = PhysicalCircle{
+            .ball_traction = @floatCast(random.float(f32)),
             .pos = r.Vector2{
                 .x = random.float(f32) * screenWidth / 2 + screenWidth / 4,
                 .y = random.float(f32) * 300,
@@ -147,18 +169,48 @@ fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
 }
 
 pub fn main() !void {
-    var buffer: [10000]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const allocator = fba.allocator();
+    // var buffer: [10000]u8 = undefined;
+    // var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    // const allocator = fba.allocator();
 
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
     r.InitWindow(screenWidth, screenHeight, "raylib [core] example - basic window");
     defer r.CloseWindow();
     r.SetTargetFPS(60);
 
-    var c = try makeRandomCreature(3, allocator);
-    defer c.deinit(allocator);
+    var joints = [_]PhysicalCircle{
+        PhysicalCircle{ .ball_traction = 1, .pos = .{
+            .x = screenWidth / 2,
+            .y = 0,
+        } },
+        PhysicalCircle{ .ball_traction = 1, .pos = .{
+            .x = 0,
+            .y = screenHeight,
+        } },
+        PhysicalCircle{ .ball_traction = 1, .pos = .{
+            .x = screenWidth,
+            .y = screenHeight,
+        } },
+    };
+    var connections = [_]JointConnection{
+        JointConnection{
+            .stretch_time = 100,
+            .connected_joints = [2]usize{ 0, 1 },
+            .base_length = 100,
+        },
+        JointConnection{
+            .stretch_time = 100,
+            .connected_joints = [2]usize{ 1, 2 },
+            .base_length = 100,
+        },
+        JointConnection{
+            .stretch_time = 100,
+            .connected_joints = [2]usize{ 2, 0 },
+            .base_length = 100,
+        },
+    };
+    var c = Creature{ .joints = &joints, .connections = &connections };
+    // defer c.deinit(allocator);
     var i: usize = 0;
     while (!r.WindowShouldClose()) : (i += 1) // Detect window close button or ESC key
     {
