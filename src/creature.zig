@@ -3,7 +3,7 @@ const r = @import("cHeaders.zig").raylib;
 const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
-var prng = std.Random.DefaultPrng.init(3);
+var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
 pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
@@ -34,6 +34,16 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
             pub fn deinit(self: *Creature, allocator: Allocator) void {
                 allocator.free(self.connections);
                 allocator.free(self.joints);
+            }
+            pub fn getAvgPos(self: Creature) r.Vector2 {
+                var avg = r.Vector2{};
+                for (self.joints) |joint| {
+                    avg.x += joint.pos.x;
+                    avg.y += joint.pos.y;
+                }
+                avg.x /= @floatFromInt(self.joints.len);
+                avg.y /= @floatFromInt(self.joints.len);
+                return avg;
             }
         };
 
