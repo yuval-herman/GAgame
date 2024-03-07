@@ -10,8 +10,8 @@ const gravity = 0.2;
 const creatures = @import("creature.zig").init(groundLevel, gravity);
 
 pub fn main() !void {
-    var buffer: [10000]u8 = undefined;
-    var textBuffer: [500]u8 = undefined;
+    var buffer: [100000]u8 = undefined;
+    // var textBuffer: [500]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
 
@@ -20,27 +20,30 @@ pub fn main() !void {
     defer r.CloseWindow();
     r.SetTargetFPS(60);
 
-    var c = try creatures.makeRandomCreature(3, allocator);
-    defer c.deinit(allocator);
+    var population: [100]creatures.Creature = undefined;
+    for (&population) |*c| {
+        c.* = try creatures.makeRandomCreature(3, allocator);
+    }
+    defer {
+        for (&population) |*c| {
+            c.deinit(allocator);
+        }
+    }
 
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
 
-        c.tick();
-
-        var averagePos: f32 = 0;
-        for (c.joints) |joint| {
-            averagePos += joint.pos.x;
+        for (&population) |*c| {
+            c.tick();
+            c.draw();
         }
-        averagePos /= @floatFromInt(c.joints.len);
 
-        c.draw();
-        r.DrawText(@ptrCast(try std.fmt.bufPrintZ(&textBuffer, "creature reached {d} position", .{averagePos})), 0, 0, 20, r.LIGHTGRAY);
         // Draw ground
         r.DrawRectangle(0, groundLevel, screenWidth, screenHeight, r.BLACK);
 
         r.EndDrawing();
     }
 }
+// r.DrawText(@ptrCast(try std.fmt.bufPrintZ(&textBuffer, "creature reached {d} position", .{averagePos})), 0, 0, 20, r.LIGHTGRAY);
