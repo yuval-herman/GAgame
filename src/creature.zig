@@ -5,34 +5,35 @@ const assert = std.debug.assert;
 
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
+const MAX_JOINTS = 10;
 
-pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
+pub fn init(groundLevel: comptime_int, gravity: comptime_float, allocator: Allocator) type {
     const Physics = @import("physics/particle.zig").init(groundLevel, gravity);
     const Particle = Physics.Particle;
     const Spring = Physics.ParticleSpring;
     return struct {
         pub const Creature = struct {
             joints: []Particle,
-            connections: []Spring,
+            connections: std.ArrayList(Spring),
 
             pub fn tick(self: *Creature) void {
                 for (self.joints) |*joint| {
                     joint.tick();
                 }
-                for (self.connections) |*connection| {
+                for (self.connections.items) |*connection| {
                     connection.tick();
                 }
             }
             pub fn draw(self: Creature) void {
-                for (self.connections) |connection| {
+                for (self.connections.items) |connection| {
                     connection.draw();
                 }
                 for (self.joints) |joint| {
                     joint.draw();
                 }
             }
-            pub fn deinit(self: *Creature, allocator: Allocator) void {
-                allocator.free(self.connections);
+            pub fn deinit(self: *Creature) void {
+                self.connections.deinit();
                 allocator.free(self.joints);
             }
             pub fn getAvgPos(self: Creature) r.Vector2 {
@@ -47,20 +48,19 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
             }
         };
 
-        /// joint_amount must be bigger then 1.
-        pub fn makeRandomCreature(joint_amount: u8, allocator: Allocator) !Creature {
+        /// 1 < joint_amount <= MAX_JOINTS.
+        pub fn makeRandomCreature(joint_amount: u8) !Creature {
             var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
             defer arena.deinit();
             const arena_allocator = arena.allocator();
-            assert(joint_amount > 1);
-            const joints = try allocator.alloc(Particle, joint_amount);
+            assert(1 < joint_amount and joint_amount <= MAX_JOINTS);
+            const joints = (try allocator.alloc(Particle, MAX_JOINTS))[0..joint_amount];
             for (joints) |*joint| {
                 joint.* = Particle{
                     .pos = r.Vector2{
                         .x = random.float(f32) * 600,
                         .y = random.float(f32) * 100,
                     },
-                    .ball_elasticity = -random.float(f32),
                 };
             }
 
@@ -96,11 +96,58 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
 
                 try connections.append(.{ current_joint, next_joint });
             }
-            var springs = try allocator.alloc(Spring, connections.items.len);
-            for (connections.items, 0..) |connection, i| {
-                springs[i] = Spring{ .particals = .{ &joints[connection[0]], &joints[connection[1]] } };
+            var springs = try std.ArrayList(Spring).initCapacity(allocator, connections.items.len);
+            for (connections.items) |connection| {
+                try springs.append(Spring{ .particals = .{ &joints[connection[0]], &joints[connection[1]] } });
             }
             return Creature{ .joints = joints, .connections = springs };
+        }
+
+        pub fn mutateCreature(c: *Creature, ind_v_chance: f32) !void {
+            if (random.float(f32) < ind_v_chance) {
+                if (random.float(f32) < 0.5 and c.joints.len + 1 < MAX_JOINTS) {
+                    const rnd_Joint_ptr = &c.joints[random.uintLessThan(usize, c.joints.len)];
+                    c.joints.len += 1;
+                    c.joints[c.joints.len - 1] = Particle{ .pos = .{ .x = 500 } };
+                    try c.connections.append(Spring{
+                        .particals = .{ rnd_Joint_ptr, &c.joints[c.joints.len - 1] },
+                    });
+                } else {
+                    // TODO: remove joint
+                }
+            }
+            if (random.float(f32) < ind_v_chance) {
+                if (random.float(f32) < 0.5) {
+                    const rnd_Joint_ptr1 = &c.joints[random.uintLessThan(usize, c.joints.len)];
+                    var rnd_Joint_ptr2 = rnd_Joint_ptr1;
+                    while (rnd_Joint_ptr2 == rnd_Joint_ptr1) {
+                        rnd_Joint_ptr2 = &c.joints[random.uintLessThan(usize, c.joints.len)];
+                    }
+                    if (for (c.connections.items) |con| {
+                        if ((con.particals[0] == rnd_Joint_ptr1 or con.particals[0] == rnd_Joint_ptr2) and
+                            (con.particals[1] == rnd_Joint_ptr1 or con.particals[1] == rnd_Joint_ptr2))
+                        {
+                            break false;
+                        }
+                    } else true)
+                        try c.connections.append(Spring{
+                            .particals = .{ rnd_Joint_ptr1, rnd_Joint_ptr2 },
+                        });
+                } else if (c.connections.items.len > 0) {
+                    _ = c.connections.swapRemove(random.uintLessThan(usize, c.connections.items.len));
+                }
+            }
+
+            for (c.joints) |*joint| {
+                if (random.float(f32) < ind_v_chance)
+                    joint.slip_factor = @floatCast(random.float(f32));
+            }
+            for (c.connections.items) |*connection| {
+                if (random.float(f32) < ind_v_chance)
+                    connection.k = @rem(random.float(f32), 0.1);
+                if (random.float(f32) < ind_v_chance)
+                    connection.rest_length = random.intRangeAtMost(u16, 10, 150);
+            }
         }
     };
 }
