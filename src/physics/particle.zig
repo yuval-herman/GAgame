@@ -35,8 +35,6 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
             rest_length: u16 = 100,
 
             pub fn tick(self: *Self) void {
-                self.particals[0].tick();
-                self.particals[1].tick();
                 var F = r.Vector2Subtract(self.particals[1].pos, self.particals[0].pos);
                 const mag = r.Vector2Length(F) - @as(f32, @floatFromInt(self.rest_length));
                 F = r.Vector2Scale(r.Vector2Normalize(F), self.k * mag);
@@ -47,8 +45,6 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
             }
             pub fn draw(self: Self) void {
                 r.DrawLineEx(self.particals[0].pos, self.particals[1].pos, 3, r.BLACK);
-                self.particals[0].draw();
-                self.particals[1].draw();
             }
         };
     };
