@@ -7,8 +7,6 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float) type {
             radius: f16 = 10,
             pos: r.Vector2 = r.Vector2{},
             velocity: r.Vector2 = r.Vector2{},
-            ball_elasticity: f32 = -1,
-            is_touching_ground: bool = false,
             slip_factor: f16 = 0.05,
 
             pub fn tick(self: *Self) void {
