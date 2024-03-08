@@ -17,31 +17,43 @@ var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
 pub fn main() !void {
-    // var textBuffer: [500]u8 = undefined;
+    var textBuffer: [500]u8 = undefined;
 
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
     r.InitWindow(screenWidth, screenHeight, "my window! WOOOOOOOOOOOW!!!!!!");
     defer r.CloseWindow();
     r.SetTargetFPS(FPS);
 
-    var c1 = try creatures.makeRandomCreature(3);
-    for (0..1000000) |_| {
-        try creatures.mutateCreature(&c1, 1);
+    var camera = r.Camera2D{
+        .zoom = 1,
+        .offset = .{ .x = screenWidth / 2, .y = screenHeight / 2 },
+    };
+
+    var pop: [100]creatures.Creature = undefined;
+    var farthest: *creatures.Creature = &pop[0];
+    for (&pop) |*c| {
+        c.* = try creatures.makeRandomCreature(3);
     }
 
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
-
-        c1.tick();
-        c1.draw();
-
+        const farthest_Pos = farthest.getAvgPos();
+        camera.target = farthest_Pos;
+        r.BeginMode2D(camera);
+        for (&pop) |*c| {
+            const avgPos = c.getAvgPos();
+            if (avgPos.x > farthest_Pos.x) {
+                farthest = c;
+            }
+            r.DrawText(@ptrCast(try std.fmt.bufPrintZ(&textBuffer, "{d:.2}", .{avgPos.x})), @intFromFloat(avgPos.x), @intFromFloat(avgPos.y - 100), 10, r.BLACK);
+            c.tick();
+            c.draw();
+        }
         // Draw ground
-        r.DrawRectangle(0, groundLevel, screenWidth, screenHeight, r.BLACK);
-
+        r.DrawRectangle(@intFromFloat(camera.target.x - camera.offset.x - 100), groundLevel, screenWidth + 200, screenHeight, r.BLACK);
+        r.EndMode2D();
         r.EndDrawing();
     }
 }
-
-// r.DrawText(@ptrCast(try std.fmt.bufPrintZ(&textBuffer, "creature reached {d} position", .{averagePos})), 0, 0, 20, r.LIGHTGRAY);

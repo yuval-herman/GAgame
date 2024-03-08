@@ -28,6 +28,7 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float, allocator: Alloc
                 for (self.connections.items) |connection| {
                     connection.draw();
                 }
+
                 for (self.joints) |joint| {
                     joint.draw();
                 }
@@ -105,17 +106,40 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float, allocator: Alloc
 
         pub fn mutateCreature(c: *Creature, ind_v_chance: f32) !void {
             if (random.float(f32) < ind_v_chance) {
+                // add or remove joint
                 if (random.float(f32) < 0.5 and c.joints.len + 1 < MAX_JOINTS) {
                     const rnd_Joint_ptr = &c.joints[random.uintLessThan(usize, c.joints.len)];
                     c.joints.len += 1;
-                    c.joints[c.joints.len - 1] = Particle{ .pos = .{ .x = 500 } };
+                    c.joints[c.joints.len - 1] = Particle{ .pos = .{ .x = random.float(f32) * 1000 } };
                     try c.connections.append(Spring{
                         .particals = .{ rnd_Joint_ptr, &c.joints[c.joints.len - 1] },
                     });
-                } else {
-                    // TODO: remove joint
+                } else if (c.joints.len > 2) {
+                    const joint_idx = random.uintLessThan(usize, c.joints.len);
+
+                    var i: usize = 0;
+                    while (i < c.connections.items.len) {
+                        if (c.connections.items[i].particals[0] == &c.joints[joint_idx] or
+                            c.connections.items[i].particals[1] == &c.joints[joint_idx])
+                        {
+                            _ = c.connections.swapRemove(i);
+                        } else {
+                            if (c.connections.items[i].particals[0] == &c.joints[c.joints.len - 1]) {
+                                c.connections.items[i].particals[0] = &c.joints[joint_idx];
+                            } else if (c.connections.items[i].particals[1] == &c.joints[c.joints.len - 1]) {
+                                c.connections.items[i].particals[1] = &c.joints[joint_idx];
+                            }
+                            i += 1;
+                        }
+                    }
+
+                    if (joint_idx < c.joints.len)
+                        c.joints[joint_idx] = c.joints[c.joints.len - 1];
+                    c.joints.len -= 1;
                 }
             }
+
+            // add or remove connection
             if (random.float(f32) < ind_v_chance) {
                 if (random.float(f32) < 0.5) {
                     const rnd_Joint_ptr1 = &c.joints[random.uintLessThan(usize, c.joints.len)];
@@ -138,16 +162,20 @@ pub fn init(groundLevel: comptime_int, gravity: comptime_float, allocator: Alloc
                 }
             }
 
+            // joint property mutation
             for (c.joints) |*joint| {
                 if (random.float(f32) < ind_v_chance)
                     joint.slip_factor = @floatCast(random.float(f32));
             }
+
+            // connection property mutation
             for (c.connections.items) |*connection| {
                 if (random.float(f32) < ind_v_chance)
                     connection.k = @rem(random.float(f32), 0.1);
                 if (random.float(f32) < ind_v_chance)
                     connection.rest_length = random.intRangeAtMost(u16, 10, 150);
             }
+            std.debug.print("connections: {}, joints: {}\n", .{ c.connections.items.len, c.joints.len });
         }
     };
 }
