@@ -4,7 +4,7 @@ const std = @import("std");
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
-const GRAVITY = 0;
+const GRAVITY = 1;
 const DMPING = 0.99;
 
 var prng = std.Random.DefaultPrng.init(0);
@@ -42,7 +42,7 @@ const Creature = struct {
                 node.velocity.y += GRAVITY;
             } else {
                 node.pos.y = GROUND_LEVEL - node.radius + 1; // can't be the exact ground position because of rounding errors
-                node.velocity.x *= -node.friction;
+                node.velocity.x *= node.friction;
                 node.velocity.y *= -node.elasticity;
             }
             node.pos.x += node.velocity.x;
@@ -84,6 +84,14 @@ const Creature = struct {
         for (self.nodes.items) |node| {
             r.DrawCircleV(node.pos, node.radius, r.RED);
         }
+    }
+
+    pub fn getFarthestNodePos(self: Creature) r.Vector2 {
+        var node = &self.nodes.items[0];
+        for (self.nodes.items[1..]) |*n| {
+            if (n.pos.x > node.pos.x) node = n;
+        }
+        return node.pos;
     }
 
     pub fn createRandom(node_amount: usize, connection_chance: f32, allocator: std.mem.Allocator) !Creature {
@@ -142,6 +150,7 @@ pub fn main() !void {
         r.BeginMode2D(camera);
         c.tick();
         c.draw();
+
         r.DrawRectangle(0, GROUND_LEVEL, SCREEN_WIDTH, 500, r.BLACK);
         r.EndMode2D();
         r.EndDrawing();
