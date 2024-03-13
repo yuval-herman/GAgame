@@ -30,6 +30,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         nodes: ArrayList(Node),
         edges: ArrayList(Muscle),
         clock: u16 = 0,
+        fitness: f32 = 0,
 
         pub fn tick(self: *Creature) void {
             self.clock +%= 1;
@@ -90,6 +91,28 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             return node.pos;
         }
 
+        pub fn resetValues(self: *Creature) void {
+            for (self.nodes.items, 0..) |*node, i| {
+                node.pos.x = @floatFromInt(i * 10);
+                node.pos.y = @floatFromInt(i * 10);
+                node.velocity.x = 0;
+                node.velocity.y = 0;
+            }
+            for (self.edges.items) |*edge| {
+                edge.is_long = false;
+            }
+            self.clock = 0;
+            self.fitness = 0;
+        }
+
+        pub fn evaluate(self: *Creature, ticks: u16) void {
+            self.resetValues();
+            for (0..ticks) |_| {
+                self.tick();
+            }
+            self.fitness = self.getFarthestNodePos().x;
+        }
+
         pub fn createRandom(node_amount: usize, connection_chance: f32, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
 
@@ -113,7 +136,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .nodes = .{ i, j },
                             .long_length = @max(n1, n2),
                             .short_length = @min(n1, n2),
-                            .strength = random.float(f32) / 10,
+                            .strength = random.float(f32) / 100,
                             .switch_at = random.intRangeAtMost(u8, 10, 255),
                         });
                     }
