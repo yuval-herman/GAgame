@@ -4,7 +4,7 @@ const std = @import("std");
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
-const GRAVITY = 1;
+const GRAVITY = 0;
 const DMPING = 0.99;
 
 var prng = std.Random.DefaultPrng.init(0);
@@ -42,7 +42,7 @@ const Creature = struct {
                 node.velocity.y += GRAVITY;
             } else {
                 node.pos.y = GROUND_LEVEL - node.radius + 1; // can't be the exact ground position because of rounding errors
-                // node.velocity.x *= -node.friction;
+                node.velocity.x *= -node.friction;
                 node.velocity.y *= -node.elasticity;
             }
             node.pos.x += node.velocity.x;
@@ -59,12 +59,11 @@ const Creature = struct {
 
             var direction_vec = r.Vector2Subtract(node2.pos, node1.pos);
             const length = r.Vector2Length(direction_vec);
-            direction_vec.x = 1 / length;
-            direction_vec.y = 1 / length;
 
-            const force = edge.strength * (length - (if (edge.is_long) edge.long_length else edge.short_length));
-            direction_vec.x *= force;
-            direction_vec.y *= force;
+            const force = edge.strength * (length - if (edge.is_long) edge.long_length else edge.short_length);
+
+            direction_vec.x *= 1 / length * force;
+            direction_vec.y *= 1 / length * force;
 
             node1.velocity.x += direction_vec.x;
             node1.velocity.y += direction_vec.y;
@@ -106,7 +105,7 @@ const Creature = struct {
                         .nodes = .{ i, j },
                         .long_length = @max(n1, n2),
                         .short_length = @min(n1, n2),
-                        .strength = 0.002, //random.float(f32) / 10,
+                        .strength = random.float(f32) / 100,
                         .switch_at = random.intRangeAtMost(u8, 10, 255),
                     });
                 }
@@ -132,7 +131,8 @@ pub fn main() !void {
 
     var c = try Creature.createRandom(4, 0.5, allocator);
     for (c.nodes.items) |*node| {
-        node.pos.x += 400;
+        node.pos.x += random.float(f32) * 400;
+        node.pos.y += random.float(f32) * 100;
     }
 
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
