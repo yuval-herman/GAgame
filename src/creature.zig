@@ -57,7 +57,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 var direction_vec = r.Vector2Subtract(node2.pos, node1.pos);
                 const length = r.Vector2Length(direction_vec);
 
-                const force = edge.strength * (length - if (edge.is_long) edge.long_length else edge.short_length);
+                const force = edge.strength * std.math.tanh((length - if (edge.is_long) edge.long_length else edge.short_length) / 1000);
 
                 direction_vec.x *= 1 / length * force;
                 direction_vec.y *= 1 / length * force;
@@ -112,6 +112,35 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
             self.fitness = self.getFarthestNodePos().x;
         }
+        pub fn createTest(node_amount: usize, allocator: std.mem.Allocator) !Creature {
+            var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
+
+            for (0..node_amount) |i| {
+                try nodes.append(Node{
+                    .pos = .{
+                        .x = @floatFromInt((i % 2) * 100),
+                        .y = GROUND_LEVEL - 10 - 50 * @as(f32, @floatFromInt(i / 2)),
+                    },
+                    .elasticity = 0.5,
+                    .friction = 0.5,
+                });
+            }
+            var edges = try ArrayList(Muscle).initCapacity(allocator, (node_amount * (node_amount - 1) / 2));
+
+            for (0..nodes.items.len) |i| {
+                for (i + 1..nodes.items.len) |j| {
+                    try edges.append(Muscle{
+                        .nodes = .{ i, j },
+                        .long_length = 200,
+                        .short_length = 50,
+                        .strength = 50,
+                        .switch_at = 60 * 2,
+                    });
+                }
+            }
+
+            return Creature{ .nodes = nodes, .edges = edges };
+        }
 
         pub fn createRandom(node_amount: usize, connection_chance: f32, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
@@ -136,7 +165,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .nodes = .{ i, j },
                             .long_length = @max(n1, n2),
                             .short_length = @min(n1, n2),
-                            .strength = random.float(f32) / 100,
+                            .strength = random.float(f32) * 50,
                             .switch_at = random.intRangeAtMost(u8, 10, 255),
                         });
                     }
