@@ -112,6 +112,50 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
             self.fitness = self.getFarthestNodePos().x;
         }
+
+        pub fn crossover(self: Creature, other: Creature) !Creature {
+            const node_amount = @min(self.nodes.items.len, other.nodes.items.len);
+            var crossover_point = random.intRangeLessThan(usize, 0, node_amount);
+            var nodes = try ArrayList(Node).initCapacity(self.nodes.allocator, node_amount);
+            if (self.nodes.items.len > other.nodes.items.len) {
+                try nodes.appendSlice(self.nodes.items[0..crossover_point]);
+                try nodes.appendSlice(other.nodes.items[crossover_point..]);
+            } else {
+                try nodes.appendSlice(other.nodes.items[0..crossover_point]);
+                try nodes.appendSlice(self.nodes.items[crossover_point..]);
+            }
+
+            const edges_amount = @min(self.edges.items.len, other.edges.items.len);
+            crossover_point = random.intRangeLessThan(usize, 0, edges_amount);
+            var edges = try ArrayList(Muscle).initCapacity(self.edges.allocator, (node_amount * (node_amount - 1) / 2));
+            if (self.edges.items.len < other.edges.items.len) {
+                try edges.appendSlice(self.edges.items[0..crossover_point]);
+                try edges.appendSlice(other.edges.items[crossover_point..]);
+            } else {
+                try edges.appendSlice(other.edges.items[0..crossover_point]);
+                try edges.appendSlice(self.edges.items[crossover_point..]);
+            }
+
+            // verify no edge points to a nonexisting node
+            var i: usize = 0;
+            std.debug.print("before:{}\n", .{edges.items.len});
+            while (i < edges.items.len) {
+                for (edges.items[i].nodes) |n| {
+                    std.debug.print("p:{} na:{}\n", .{ n, nodes.items.len });
+                    if (n >= nodes.items.len) {
+                        _ = edges.swapRemove(i);
+                        std.debug.print("p:{} was removed\n", .{n});
+                        break;
+                    }
+                } else i += 1;
+            }
+            std.debug.print("after:{}\n", .{edges.items.len});
+
+            var c = Creature{ .nodes = nodes, .edges = edges };
+            c.resetValues();
+            return c;
+        }
+
         pub fn createTest(node_amount: usize, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
 
@@ -165,7 +209,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .nodes = .{ i, j },
                             .long_length = @max(n1, n2),
                             .short_length = @min(n1, n2),
-                            .strength = random.float(f32) * 50,
+                            .strength = random.float(f32) * 100,
                             .switch_at = random.intRangeAtMost(u8, 10, 255),
                         });
                     }
