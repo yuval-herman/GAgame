@@ -14,7 +14,7 @@ const random_values = struct {
         return random.float(f32);
     }
     fn strength() f32 {
-        return random.float(f32) * 100;
+        return random.float(f32) * 100 + 50;
     }
     fn long_length() f32 {
         return random.float(f32) * (100 - 10) + 10;
