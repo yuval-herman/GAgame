@@ -175,12 +175,83 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             return c;
         }
 
-        // pub fn mutate(self: *Creature, ind_mut_chance: f16) !void {
-        //     for (self.nodes.items) |*n| {
-        //         // n.elasticity = ;
-        //         // n.friction = ;
-        //     }
-        // }
+        pub fn mutate(self: *Creature, ind_mut_chance: f16) !void {
+            for (self.nodes.items) |*n| {
+                if (random.float(f32) < ind_mut_chance) n.elasticity = random_values.elasticity();
+                if (random.float(f32) < ind_mut_chance) n.friction = random_values.friction();
+            }
+            for (self.edges.items) |*e| {
+                if (random.float(f32) < ind_mut_chance) e.long_length = random_values.long_length();
+                if (random.float(f32) < ind_mut_chance) e.short_length = random_values.short_length();
+                if (random.float(f32) < ind_mut_chance) e.strength = random_values.strength();
+                if (random.float(f32) < ind_mut_chance) e.switch_at = random_values.switch_at();
+            }
+
+            // add or remove node
+            if (random.float(f32) < ind_mut_chance) {
+                if (random.boolean()) {
+                    if (self.nodes.items.len > 0) {
+                        const node_idx = random.uintLessThan(usize, self.nodes.items.len);
+                        _ = self.nodes.swapRemove(node_idx);
+                        // verify no edge points to the removed node and repoint edges to the
+                        // last node that was swapped.
+                        var i: usize = 0;
+                        while (i < self.edges.items.len) {
+                            for (&self.edges.items[i].nodes) |*n| {
+                                if (n.* == node_idx) {
+                                    _ = self.edges.swapRemove(i);
+                                    break;
+                                } else if (n.* == self.nodes.items.len) {
+                                    n.* = node_idx;
+                                }
+                            } else i += 1;
+                        }
+                    }
+                } else {
+                    try self.nodes.append(.{
+                        .elasticity = random_values.elasticity(),
+                        .friction = random_values.friction(),
+                        .pos = .{
+                            .x = random.float(f32),
+                            .y = random.float(f32),
+                        },
+                    });
+                    if (self.nodes.items.len > 1) {
+                        try self.edges.append(.{
+                            .long_length = random_values.long_length(),
+                            .short_length = random_values.short_length(),
+                            .strength = random_values.strength(),
+                            .switch_at = random_values.switch_at(),
+                            .nodes = .{
+                                random.uintLessThan(usize, self.nodes.items.len - 1),
+                                self.nodes.items.len - 1,
+                            },
+                        });
+                    }
+                }
+            }
+            // add or remove edge
+            if (random.float(f32) < ind_mut_chance) {
+                if (random.boolean()) {
+                    if (self.edges.items.len > 0) {
+                        _ = self.edges.swapRemove(random.uintLessThan(usize, self.edges.items.len));
+                    }
+                } else {
+                    if (self.nodes.items.len > 0) {
+                        const a = random.uintLessThan(usize, self.nodes.items.len);
+                        var b = random.uintLessThan(usize, self.nodes.items.len);
+                        while (b == a) b = random.uintLessThan(usize, self.nodes.items.len);
+                        try self.edges.append(.{
+                            .long_length = random_values.long_length(),
+                            .short_length = random_values.short_length(),
+                            .strength = random_values.strength(),
+                            .switch_at = random_values.switch_at(),
+                            .nodes = .{ a, b },
+                        });
+                    }
+                }
+            }
+        }
 
         pub fn createTest(node_amount: usize, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);

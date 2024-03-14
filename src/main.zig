@@ -58,7 +58,7 @@ pub fn main() !void {
             );
         }
 
-        // c.mutate();
+        try c.mutate(0.01);
         c.tick();
         c.draw();
 
