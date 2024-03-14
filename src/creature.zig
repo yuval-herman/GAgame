@@ -215,5 +215,10 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
 
             return Creature{ .nodes = nodes, .edges = edges };
         }
+
+        pub fn deinit(self: *Creature) void {
+            self.edges.deinit();
+            self.nodes.deinit();
+        }
     };
 }
