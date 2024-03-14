@@ -26,7 +26,36 @@ pub fn main() !void {
         .offset = .{ .x = SCREEN_WIDTH / 2, .y = SCREEN_HEIGHT / 2 },
     };
 
-    var c: Creature = try Creature.createRandom(4, 0.5, allocator);
+    var pop: [100]Creature = undefined;
+    for (&pop) |*c| {
+        c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 10), random.float(f32), allocator);
+    }
+
+    for (0..100) |gen| {
+        std.debug.print("gen: {}\n", .{gen});
+        for (&pop) |*c| {
+            c.evaluate(500);
+        }
+        std.mem.sort(Creature, &pop, {}, creatureComp);
+        var newPop: [pop.len]Creature = undefined;
+        for (&newPop) |*nc| {
+            const a = random.intRangeLessThan(usize, 0, pop.len / 3);
+            const b = random.intRangeLessThan(usize, 0, pop.len / 3);
+            nc.* = try pop[a].crossover(pop[b]);
+            try nc.mutate(0.02);
+        }
+        for (&pop) |*c| {
+            c.deinit();
+        }
+        pop = newPop;
+    }
+    for (&pop) |*c| {
+        c.evaluate(500);
+    }
+    std.mem.sort(Creature, &pop, {}, creatureComp);
+
+    var c: Creature = pop[0];
+    c.resetValues();
 
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
@@ -58,7 +87,6 @@ pub fn main() !void {
             );
         }
 
-        try c.mutate(0.01);
         c.tick();
         c.draw();
 
