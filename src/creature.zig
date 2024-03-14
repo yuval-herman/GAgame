@@ -148,27 +148,27 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         }
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
-            const node_amount = @min(self.nodes.items.len, other.nodes.items.len);
+            const node_amount = (self.nodes.items.len + other.nodes.items.len) / 2;
             var crossover_point = if (node_amount > 0) random.intRangeLessThan(usize, 0, node_amount) else 0;
             var nodes = try ArrayList(Node).initCapacity(self.nodes.allocator, node_amount);
 
-            if (self.nodes.items.len > other.nodes.items.len) {
-                try nodes.appendSlice(self.nodes.items[0..crossover_point]);
-                try nodes.appendSlice(other.nodes.items[crossover_point..]);
+            if (self.nodes.items.len < other.nodes.items.len) {
+                if (self.nodes.items.len >= crossover_point) try nodes.appendSlice(self.nodes.items[0..crossover_point]) else crossover_point = 0;
+                try nodes.appendSlice(other.nodes.items[crossover_point..node_amount]);
             } else {
-                try nodes.appendSlice(other.nodes.items[0..crossover_point]);
-                try nodes.appendSlice(self.nodes.items[crossover_point..]);
+                if (other.nodes.items.len >= crossover_point) try nodes.appendSlice(other.nodes.items[0..crossover_point]) else crossover_point = 0;
+                try nodes.appendSlice(self.nodes.items[crossover_point..node_amount]);
             }
 
-            const edges_amount = @min(self.edges.items.len, other.edges.items.len);
+            const edges_amount = (self.edges.items.len + other.edges.items.len) / 2;
             crossover_point = if (edges_amount > 0) random.intRangeLessThan(usize, 0, edges_amount) else 0;
             var edges = try ArrayList(Muscle).initCapacity(self.edges.allocator, if (node_amount > 1) node_amount * (node_amount - 1) / 2 else 0);
             if (self.edges.items.len < other.edges.items.len) {
-                try edges.appendSlice(self.edges.items[0..crossover_point]);
-                try edges.appendSlice(other.edges.items[crossover_point..]);
+                if (self.edges.items.len >= crossover_point) try edges.appendSlice(self.edges.items[0..crossover_point]) else crossover_point = 0;
+                try edges.appendSlice(other.edges.items[crossover_point..edges_amount]);
             } else {
-                try edges.appendSlice(other.edges.items[0..crossover_point]);
-                try edges.appendSlice(self.edges.items[crossover_point..]);
+                if (other.edges.items.len >= crossover_point) try edges.appendSlice(other.edges.items[0..crossover_point]) else crossover_point = 0;
+                try edges.appendSlice(self.edges.items[crossover_point..edges_amount]);
             }
 
             // verify no edge points to a nonexisting node
@@ -199,9 +199,9 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 if (random.float(f32) < ind_mut_chance) e.switch_at = random_values.switch_at();
             }
 
-            // add or remove node
             if (random.float(f32) < ind_mut_chance) {
                 if (random.boolean()) {
+                    // remove node
                     if (self.nodes.items.len > 0) {
                         const node_idx = random.uintLessThan(usize, self.nodes.items.len);
                         _ = self.nodes.swapRemove(node_idx);
@@ -220,6 +220,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                         }
                     }
                 } else {
+                    // add node
                     try self.nodes.append(.{
                         .elasticity = random_values.elasticity(),
                         .friction = random_values.friction(),
@@ -238,13 +239,15 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                     }
                 }
             }
-            // add or remove edge
+
             if (random.float(f32) < ind_mut_chance) {
                 if (random.boolean()) {
+                    // remove edge
                     if (self.edges.items.len > 0) {
                         _ = self.edges.swapRemove(random.uintLessThan(usize, self.edges.items.len));
                     }
                 } else {
+                    // add edge
                     if (self.nodes.items.len > 1) {
                         const a = random.uintLessThan(usize, self.nodes.items.len);
                         var b = random.uintLessThan(usize, self.nodes.items.len);
