@@ -5,6 +5,28 @@ var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
 const ArrayList = std.ArrayList;
+
+const random_values = struct {
+    fn elasticity() f32 {
+        return random.float(f32);
+    }
+    fn friction() f32 {
+        return elasticity();
+    }
+    fn strength() f32 {
+        return random.float(f32) * 100;
+    }
+    fn long_length() f32 {
+        return random.float(f32) * (100 - 10) + 10;
+    }
+    fn short_length() f32 {
+        return long_length();
+    }
+    fn switch_at() u8 {
+        return random.intRangeAtMost(u8, 10, 255);
+    }
+};
+
 const Node = struct {
     pos: r.Vector2 = r.Vector2{},
     velocity: r.Vector2 = r.Vector2{},
@@ -153,6 +175,13 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             return c;
         }
 
+        // pub fn mutate(self: *Creature, ind_mut_chance: f16) !void {
+        //     for (self.nodes.items) |*n| {
+        //         // n.elasticity = ;
+        //         // n.friction = ;
+        //     }
+        // }
+
         pub fn createTest(node_amount: usize, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
 
@@ -189,8 +218,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..node_amount) |i| {
                 try nodes.append(Node{
                     .pos = .{ .x = @floatFromInt(i), .y = @floatFromInt(i) },
-                    .elasticity = random.float(f32),
-                    .friction = random.float(f32),
+                    .elasticity = random_values.elasticity(),
+                    .friction = random_values.friction(),
                 });
             }
 
@@ -200,14 +229,14 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..nodes.items.len) |i| {
                 for (i + 1..nodes.items.len) |j| {
                     if (random.float(f32) < connection_chance) {
-                        const n1: f32 = @floatFromInt(random.intRangeAtMost(u8, 10, 100));
-                        const n2: f32 = @floatFromInt(random.intRangeAtMost(u8, 10, 100));
+                        const n1: f32 = random_values.long_length();
+                        const n2: f32 = random_values.short_length();
                         try edges.append(Muscle{
                             .nodes = .{ i, j },
                             .long_length = @max(n1, n2),
                             .short_length = @min(n1, n2),
-                            .strength = random.float(f32) * 100,
-                            .switch_at = random.intRangeAtMost(u8, 10, 255),
+                            .strength = random_values.strength(),
+                            .switch_at = random_values.switch_at(),
                         });
                     }
                 }
