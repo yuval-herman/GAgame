@@ -115,8 +115,9 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
             const node_amount = @min(self.nodes.items.len, other.nodes.items.len);
-            var crossover_point = random.intRangeLessThan(usize, 0, node_amount);
+            var crossover_point = if (node_amount > 0) random.intRangeLessThan(usize, 0, node_amount) else 0;
             var nodes = try ArrayList(Node).initCapacity(self.nodes.allocator, node_amount);
+
             if (self.nodes.items.len > other.nodes.items.len) {
                 try nodes.appendSlice(self.nodes.items[0..crossover_point]);
                 try nodes.appendSlice(other.nodes.items[crossover_point..]);
@@ -126,7 +127,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
 
             const edges_amount = @min(self.edges.items.len, other.edges.items.len);
-            crossover_point = random.intRangeLessThan(usize, 0, edges_amount);
+            crossover_point = if (edges_amount > 0) random.intRangeLessThan(usize, 0, edges_amount) else 0;
             var edges = try ArrayList(Muscle).initCapacity(self.edges.allocator, (node_amount * (node_amount - 1) / 2));
             if (self.edges.items.len < other.edges.items.len) {
                 try edges.appendSlice(self.edges.items[0..crossover_point]);
@@ -138,18 +139,14 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
 
             // verify no edge points to a nonexisting node
             var i: usize = 0;
-            std.debug.print("before:{}\n", .{edges.items.len});
             while (i < edges.items.len) {
                 for (edges.items[i].nodes) |n| {
-                    std.debug.print("p:{} na:{}\n", .{ n, nodes.items.len });
                     if (n >= nodes.items.len) {
                         _ = edges.swapRemove(i);
-                        std.debug.print("p:{} was removed\n", .{n});
                         break;
                     }
                 } else i += 1;
             }
-            std.debug.print("after:{}\n", .{edges.items.len});
 
             var c = Creature{ .nodes = nodes, .edges = edges };
             c.resetValues();
