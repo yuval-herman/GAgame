@@ -46,7 +46,7 @@ const Muscle = struct {
     switch_at: u8,
     is_long: bool = false,
 };
-pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comptime_float) type {
+pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comptime_float, RELAX_GRAPH_ITERS: comptime_int) type {
     return struct {
         const Creature = @This();
         nodes: ArrayList(Node),
@@ -55,12 +55,15 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         fitness: f32 = 0,
 
         pub fn tick(self: *Creature) void {
+            tick_values(self, GROUND_LEVEL, GRAVITY);
+        }
+        pub fn tick_values(self: *Creature, ground_level: comptime_float, gravity: comptime_float) void {
             self.clock +%= 1;
             for (self.nodes.items) |*node| {
-                if (!node.isGrounded(GROUND_LEVEL)) {
-                    node.velocity.y += GRAVITY;
+                if (!node.isGrounded(ground_level)) {
+                    node.velocity.y += gravity;
                 } else {
-                    node.pos.y = GROUND_LEVEL - node.radius + 1; // can't be the exact ground position because of rounding errors
+                    node.pos.y = ground_level - node.radius + 1; // can't be the exact ground position because of rounding errors
                     node.velocity.x *= node.friction;
                     node.velocity.y *= -node.elasticity;
                 }
@@ -117,9 +120,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         }
 
         pub fn resetValues(self: *Creature) void {
-            for (self.nodes.items, 0..) |*node, i| {
-                node.pos.x = @floatFromInt(i * 10);
-                node.pos.y = @floatFromInt(i * 10);
+            for (self.nodes.items) |*node| {
                 node.velocity.x = 0;
                 node.velocity.y = 0;
             }
@@ -128,6 +129,14 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
             self.clock = 0;
             self.fitness = 0;
+
+            for (self.nodes.items) |*node| {
+                node.pos.x = random.float(f32);
+                node.pos.y = random.float(f32);
+            }
+            for (0..RELAX_GRAPH_ITERS) |_| {
+                self.tick_values(99999, 0);
+            }
         }
 
         pub fn evaluate(self: *Creature, ticks: u16) void {
@@ -153,7 +162,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
 
             const edges_amount = @min(self.edges.items.len, other.edges.items.len);
             crossover_point = if (edges_amount > 0) random.intRangeLessThan(usize, 0, edges_amount) else 0;
-            var edges = try ArrayList(Muscle).initCapacity(self.edges.allocator, (node_amount * (node_amount - 1) / 2));
+            var edges = try ArrayList(Muscle).initCapacity(self.edges.allocator, if (node_amount > 1) node_amount * (node_amount - 1) / 2 else 0);
             if (self.edges.items.len < other.edges.items.len) {
                 try edges.appendSlice(self.edges.items[0..crossover_point]);
                 try edges.appendSlice(other.edges.items[crossover_point..]);
@@ -214,10 +223,6 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                     try self.nodes.append(.{
                         .elasticity = random_values.elasticity(),
                         .friction = random_values.friction(),
-                        .pos = .{
-                            .x = random.float(f32),
-                            .y = random.float(f32),
-                        },
                     });
                     if (self.nodes.items.len > 1) {
                         try self.edges.append(.{
@@ -240,7 +245,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                         _ = self.edges.swapRemove(random.uintLessThan(usize, self.edges.items.len));
                     }
                 } else {
-                    if (self.nodes.items.len > 0) {
+                    if (self.nodes.items.len > 1) {
                         const a = random.uintLessThan(usize, self.nodes.items.len);
                         var b = random.uintLessThan(usize, self.nodes.items.len);
                         while (b == a) b = random.uintLessThan(usize, self.nodes.items.len);
@@ -289,9 +294,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         pub fn createRandom(node_amount: usize, connection_chance: f32, allocator: std.mem.Allocator) !Creature {
             var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
 
-            for (0..node_amount) |i| {
+            for (0..node_amount) |_| {
                 try nodes.append(Node{
-                    .pos = .{ .x = @floatFromInt(i), .y = @floatFromInt(i) },
                     .elasticity = random_values.elasticity(),
                     .friction = random_values.friction(),
                 });
@@ -315,8 +319,9 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                     }
                 }
             }
-
-            return Creature{ .nodes = nodes, .edges = edges };
+            var c = Creature{ .nodes = nodes, .edges = edges };
+            c.resetValues();
+            return c;
         }
 
         pub fn deinit(self: *Creature) void {

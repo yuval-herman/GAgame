@@ -7,13 +7,15 @@ const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
 const GRAVITY = 1;
 const DAMPING = 0.99;
-const EVALUATION_TICKS = 500;
-const SELECTION_RATE = 10;
-const MUTATION_RATE = 0.4;
-const IND_MUTATION_RATE = 0.1;
+const EVALUATION_TICKS = 1000;
+const SELECTION_RATE = 2;
+const MUTATION_RATE = 0.2;
+const IND_MUTATION_RATE = 0.05;
 const GENERATIONS = 100;
+const RELAX_GRAPH_ITERS = 10;
+const POPULATION_SIZE = 1000;
 
-const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING);
+const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 var textBuffer: [1000]u8 = undefined;
@@ -26,14 +28,19 @@ pub fn main() !void {
     defer r.CloseWindow();
     r.SetTargetFPS(60);
 
-    var camera = r.Camera2D{
-        .zoom = 1,
-        .offset = .{ .x = SCREEN_WIDTH / 2, .y = SCREEN_HEIGHT / 2 },
-    };
-
-    var pop: [100]Creature = undefined;
+    var pop: [POPULATION_SIZE]Creature = undefined;
     var newPop: [pop.len]Creature = undefined;
+    defer {
+        for (&newPop) |*c| {
+            c.deinit();
+        }
+    }
     var best_history: [GENERATIONS]Creature = undefined;
+    defer {
+        for (&best_history) |*c| {
+            c.deinit();
+        }
+    }
     for (&pop) |*c| {
         c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 10), random.float(f32), allocator);
     }
@@ -51,28 +58,31 @@ pub fn main() !void {
         for (pop[1..]) |cs| {
             if ((cs.getAvgPos().x) == amount) same_amount += 1;
         }
-        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), same amount: {}\n", .{ gen, avg.x, avg.y, same_amount });
+        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), same amount: {}, edges: {}, nodes: {}\n", .{ gen, avg.x, avg.y, same_amount, pop[0].nodes.items.len, pop[0].edges.items.len });
 
         for (&newPop) |*nc| {
             const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
             var b = a;
             while (a == b) b = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
-
             nc.* = try pop[a].crossover(pop[b]);
+
             if (random.float(f32) < MUTATION_RATE) try nc.mutate(IND_MUTATION_RATE);
         }
 
         for (&pop) |*c| {
             c.deinit();
         }
-        @memcpy(&pop, &newPop);
+        pop = newPop;
     }
-
     for (&pop) |*c| {
         c.evaluate(EVALUATION_TICKS);
     }
     std.mem.sort(Creature, &pop, {}, creatureComp);
 
+    var camera = r.Camera2D{
+        .zoom = 1,
+        .offset = .{ .x = SCREEN_WIDTH / 2, .y = SCREEN_HEIGHT / 2 },
+    };
     var c: Creature = undefined;
     var timer: u16 = 0;
     var cI: usize = GENERATIONS - 10;
@@ -135,4 +145,34 @@ pub fn main() !void {
 fn creatureComp(context: void, a: Creature, b: Creature) bool {
     _ = context;
     return a.fitness > b.fitness;
+}
+
+const testing = std.testing;
+test "memory leaks" {
+    var a = try Creature.createRandom(4, 0.5, testing.allocator);
+    var b = try Creature.createRandom(4, 0.5, testing.allocator);
+    var c = try a.crossover(b);
+
+    defer a.deinit();
+    defer b.deinit();
+    defer c.deinit();
+
+    var arr: [10]Creature = undefined;
+    var arr2: [10]Creature = undefined;
+    for (&arr) |*d| {
+        d.* = try Creature.createRandom(4, 0.5, testing.allocator);
+    }
+    for (0..3) |_| {
+        for (&arr2) |*d| {
+            d.* = try arr[0].crossover(arr[1]);
+        }
+        for (&arr) |*d| {
+            d.deinit();
+        }
+        arr = arr2;
+    }
+
+    for (&arr2) |*d| {
+        d.deinit();
+    }
 }
