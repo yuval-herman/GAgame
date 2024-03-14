@@ -1,19 +1,21 @@
 const r = @import("cHeaders.zig").raylib;
 const std = @import("std");
+const assert = std.debug.assert;
 const bufPrint = std.fmt.bufPrint;
 
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
-const GRAVITY = 1;
+const GRAVITY = 0.1;
 const DAMPING = 0.99;
 const EVALUATION_TICKS = 1000;
-const SELECTION_RATE = 2;
+const SELECTION_RATE = 5;
 const MUTATION_RATE = 0.2;
-const IND_MUTATION_RATE = 0.05;
+const IND_MUTATION_RATE = 0.5;
 const GENERATIONS = 100;
-const RELAX_GRAPH_ITERS = 10;
+const RELAX_GRAPH_ITERS = 100;
 const POPULATION_SIZE = 1000;
+const HOF_SIZE = 5;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
 var prng = std.Random.DefaultPrng.init(0);
@@ -21,6 +23,7 @@ const random = prng.random();
 var textBuffer: [1000]u8 = undefined;
 
 pub fn main() !void {
+    assert(HOF_SIZE < POPULATION_SIZE);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
@@ -42,23 +45,25 @@ pub fn main() !void {
         }
     }
     for (&pop) |*c| {
-        c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 10), random.float(f32), allocator);
+        c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 5), random.float(f32), allocator);
     }
 
     for (0..GENERATIONS) |gen| {
-        for (&pop) |*c| {
+        for (pop[HOF_SIZE..]) |*c| {
             c.evaluate(EVALUATION_TICKS);
         }
         std.mem.sort(Creature, &pop, {}, creatureComp);
-
         best_history[gen] = try pop[0].clone();
         const avg = pop[0].getAvgPos();
-        var same_amount: u16 = 0;
-        const amount = (avg.x);
-        for (pop[1..]) |cs| {
-            if ((cs.getAvgPos().x) == amount) same_amount += 1;
+        var avg_edges: usize = 0;
+        var avg_nodes: usize = 0;
+        for (pop) |cs| {
+            avg_edges += cs.edges.items.len;
+            avg_nodes += cs.nodes.items.len;
         }
-        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), same amount: {}, edges: {}, nodes: {}\n", .{ gen, avg.x, avg.y, same_amount, pop[0].nodes.items.len, pop[0].edges.items.len });
+        avg_edges /= pop.len;
+        avg_nodes /= pop.len;
+        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), edges: {}, nodes: {}\n", .{ gen, avg.x, avg.y, avg_nodes, avg_edges });
 
         for (&newPop) |*nc| {
             const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
@@ -69,10 +74,10 @@ pub fn main() !void {
             if (random.float(f32) < MUTATION_RATE) try nc.mutate(IND_MUTATION_RATE);
         }
 
-        for (&pop) |*c| {
+        for (pop[HOF_SIZE..]) |*c| {
             c.deinit();
         }
-        pop = newPop;
+        @memcpy(pop[HOF_SIZE..], newPop[0 .. pop.len - HOF_SIZE]);
     }
     for (&pop) |*c| {
         c.evaluate(EVALUATION_TICKS);
@@ -94,7 +99,7 @@ pub fn main() !void {
             const avg = c.getAvgPos();
             std.debug.print("timer: {}, cI: {} avg: ({d:.2}, {d:.2})\n", .{ timer, cI, avg.x, avg.y });
             c.resetValues();
-            cI = (cI + 1) % pop.len;
+            cI = (cI + 1) % (pop.len - 1);
         }
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
