@@ -7,6 +7,11 @@ const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
 const GRAVITY = 1;
 const DAMPING = 0.99;
+const EVALUATION_TICKS = 500;
+const SELECTION_RATE = 10;
+const MUTATION_RATE = 0.4;
+const IND_MUTATION_RATE = 0.1;
+const GENERATIONS = 100;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING);
 var prng = std.Random.DefaultPrng.init(0);
@@ -27,38 +32,60 @@ pub fn main() !void {
     };
 
     var pop: [100]Creature = undefined;
+    var newPop: [pop.len]Creature = undefined;
+    var best_history: [GENERATIONS]Creature = undefined;
     for (&pop) |*c| {
         c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 10), random.float(f32), allocator);
     }
 
-    for (0..100) |gen| {
-        std.debug.print("gen: {}\n", .{gen});
+    for (0..GENERATIONS) |gen| {
         for (&pop) |*c| {
-            c.evaluate(500);
+            c.evaluate(EVALUATION_TICKS);
         }
         std.mem.sort(Creature, &pop, {}, creatureComp);
-        var newPop: [pop.len]Creature = undefined;
-        for (&newPop) |*nc| {
-            const a = random.intRangeLessThan(usize, 0, pop.len / 3);
-            const b = random.intRangeLessThan(usize, 0, pop.len / 3);
-            nc.* = try pop[a].crossover(pop[b]);
-            try nc.mutate(0.02);
+
+        best_history[gen] = try pop[0].clone();
+        const avg = pop[0].getAvgPos();
+        var same_amount: u16 = 0;
+        const amount = (avg.x);
+        for (pop[1..]) |cs| {
+            if ((cs.getAvgPos().x) == amount) same_amount += 1;
         }
+        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), same amount: {}\n", .{ gen, avg.x, avg.y, same_amount });
+
+        for (&newPop) |*nc| {
+            const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
+            var b = a;
+            while (a == b) b = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
+
+            nc.* = try pop[a].crossover(pop[b]);
+            if (random.float(f32) < MUTATION_RATE) try nc.mutate(IND_MUTATION_RATE);
+        }
+
         for (&pop) |*c| {
             c.deinit();
         }
-        pop = newPop;
+        @memcpy(&pop, &newPop);
     }
+
     for (&pop) |*c| {
-        c.evaluate(500);
+        c.evaluate(EVALUATION_TICKS);
     }
     std.mem.sort(Creature, &pop, {}, creatureComp);
 
-    var c: Creature = pop[0];
-    c.resetValues();
+    var c: Creature = undefined;
+    var timer: u16 = 0;
+    var cI: usize = GENERATIONS - 10;
 
-    while (!r.WindowShouldClose()) // Detect window close button or ESC key
+    while (!r.WindowShouldClose()) : (timer +%= 1) // Detect window close button or ESC key
     {
+        if (timer % (60 * 5) == 0) {
+            c = best_history[cI];
+            const avg = c.getAvgPos();
+            std.debug.print("timer: {}, cI: {} avg: ({d:.2}, {d:.2})\n", .{ timer, cI, avg.x, avg.y });
+            c.resetValues();
+            cI = (cI + 1) % pop.len;
+        }
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
         r.BeginMode2D(camera);

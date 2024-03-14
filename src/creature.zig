@@ -8,10 +8,10 @@ const ArrayList = std.ArrayList;
 
 const random_values = struct {
     fn elasticity() f32 {
-        return random.float(f32);
+        return random.float(f32) / 10;
     }
     fn friction() f32 {
-        return elasticity();
+        return random.float(f32);
     }
     fn strength() f32 {
         return random.float(f32) * 100;
@@ -105,12 +105,15 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
         }
 
-        pub fn getFarthestNodePos(self: Creature) r.Vector2 {
-            var node = &self.nodes.items[0];
-            for (self.nodes.items[1..]) |*n| {
-                if (n.pos.x > node.pos.x) node = n;
+        pub fn getAvgPos(self: Creature) r.Vector2 {
+            var avg = r.Vector2{};
+            for (self.nodes.items) |n| {
+                avg.x += n.pos.x;
+                avg.y += n.pos.y;
             }
-            return node.pos;
+            avg.x /= @floatFromInt(self.nodes.items.len);
+            avg.y /= @floatFromInt(self.nodes.items.len);
+            return avg;
         }
 
         pub fn resetValues(self: *Creature) void {
@@ -132,7 +135,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..ticks) |_| {
                 self.tick();
             }
-            self.fitness = self.getFarthestNodePos().x;
+            self.fitness = self.getAvgPos().x;
         }
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
@@ -319,6 +322,13 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         pub fn deinit(self: *Creature) void {
             self.edges.deinit();
             self.nodes.deinit();
+        }
+
+        pub fn clone(self: Creature) !Creature {
+            var c = self;
+            c.edges = try self.edges.clone();
+            c.nodes = try self.nodes.clone();
+            return c;
         }
     };
 }
