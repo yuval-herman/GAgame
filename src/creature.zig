@@ -4,9 +4,15 @@ const r = @import("cHeaders.zig").raylib;
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
+var c_prng = std.Random.DefaultPrng.init(0);
+const c_random = c_prng.random();
+
 const ArrayList = std.ArrayList;
 
 const random_values = struct {
+    fn seed() u64 {
+        return random.int(u64);
+    }
     fn elasticity() f32 {
         return random.float(f32) / 10;
     }
@@ -53,6 +59,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         edges: ArrayList(Muscle),
         clock: u16 = 0,
         fitness: f32 = 0,
+        seed: u64,
 
         pub fn tick(self: *Creature) void {
             tick_values(self, GROUND_LEVEL, GRAVITY);
@@ -120,9 +127,12 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         }
 
         pub fn resetValues(self: *Creature) void {
+            c_prng.seed(self.seed);
             for (self.nodes.items) |*node| {
                 node.velocity.x = 0;
                 node.velocity.y = 0;
+                node.pos.x = c_random.float(f32);
+                node.pos.y = c_random.float(f32);
             }
             for (self.edges.items) |*edge| {
                 edge.is_long = false;
@@ -130,10 +140,6 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             self.clock = 0;
             self.fitness = 0;
 
-            for (self.nodes.items) |*node| {
-                node.pos.x = random.float(f32);
-                node.pos.y = random.float(f32);
-            }
             for (0..RELAX_GRAPH_ITERS) |_| {
                 self.tick_values(99999, 0);
             }
@@ -182,7 +188,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 } else i += 1;
             }
 
-            var c = Creature{ .nodes = nodes, .edges = edges };
+            var c = Creature{ .nodes = nodes, .edges = edges, .seed = random_values.seed() };
             c.resetValues();
             return c;
         }
@@ -322,7 +328,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                     }
                 }
             }
-            var c = Creature{ .nodes = nodes, .edges = edges };
+            var c = Creature{ .nodes = nodes, .edges = edges, .seed = random_values.seed() };
             c.resetValues();
             return c;
         }
