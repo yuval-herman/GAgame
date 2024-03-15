@@ -8,11 +8,11 @@ const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT - 100;
 const GRAVITY = 0.1;
 const DAMPING = 0.99;
-const EVALUATION_TICKS = 1000;
+const EVALUATION_TICKS = 60 * 10;
 const SELECTION_RATE = 5;
 const MUTATION_RATE = 0.2;
 const IND_MUTATION_RATE = 0.5;
-const GENERATIONS = 100;
+const GENERATIONS = 10;
 const RELAX_GRAPH_ITERS = 100;
 const POPULATION_SIZE = 1000;
 const HOF_SIZE = 5;
@@ -23,6 +23,7 @@ const random = prng.random();
 var textBuffer: [1000]u8 = undefined;
 
 pub fn main() !void {
+    r.SetTraceLogLevel(r.LOG_WARNING);
     assert(HOF_SIZE < POPULATION_SIZE);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
@@ -54,6 +55,7 @@ pub fn main() !void {
         }
         std.mem.sort(Creature, &pop, {}, creatureComp);
         best_history[gen] = try pop[0].clone();
+
         const avg = pop[0].getAvgPos();
         var avg_edges: usize = 0;
         var avg_nodes: usize = 0;
@@ -91,21 +93,37 @@ pub fn main() !void {
     var c: Creature = undefined;
     var timer: u16 = 0;
     var cI: usize = GENERATIONS - 10;
+    var changeC = false;
 
     while (!r.WindowShouldClose()) : (timer +%= 1) // Detect window close button or ESC key
     {
-        if (timer % (60 * 5) == 0) {
+        if (r.IsKeyPressed(r.KEY_RIGHT) and cI < best_history.len - 1) {
+            cI += 1;
+            changeC = true;
+            timer = 1;
+        }
+        if (r.IsKeyPressed(r.KEY_LEFT) and cI >= 1) {
+            cI -= 1;
+            changeC = true;
+            timer = 1;
+        }
+        if (timer % (EVALUATION_TICKS) == 0) {
+            changeC = true;
+            cI = (cI + 1) % (best_history.len - 1);
+        }
+        if (changeC) {
+            changeC = false;
             c = best_history[cI];
             const avg = c.getAvgPos();
             std.debug.print("timer: {}, cI: {} avg: ({d:.2}, {d:.2})\n", .{ timer, cI, avg.x, avg.y });
             c.resetValues();
-            cI = (cI + 1) % (pop.len - 1);
         }
         r.BeginDrawing();
         r.ClearBackground(r.RAYWHITE);
         r.BeginMode2D(camera);
 
         var text_buffer_idx: usize = 0;
+        var text_slice: []u8 = undefined;
         for (0..100) |i| {
             const font_size = 30;
             var sign = r.Rectangle{
@@ -114,7 +132,7 @@ pub fn main() !void {
                 .height = 50,
                 .width = undefined,
             };
-            const text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{sign.x / 100});
+            text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{sign.x / 100});
             text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
             const text: [*c]u8 = @ptrCast(text_slice);
             const text_width: f32 = @floatFromInt(r.MeasureText(text, font_size));
@@ -132,13 +150,18 @@ pub fn main() !void {
         c.tick();
         c.draw();
 
-        camera.target.x = 0;
-        for (c.nodes.items) |n| {
-            camera.target.x += n.pos.x;
-        }
-        camera.target.x /= @floatFromInt(c.nodes.items.len);
+        camera.target = c.getAvgPos();
 
-        camera.target.y = GROUND_LEVEL;
+        text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{camera.target.x});
+        text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+
+        r.DrawText(
+            @ptrCast(text_slice),
+            @intFromFloat(camera.target.x),
+            @intFromFloat(camera.target.y - 200),
+            20,
+            r.BLACK,
+        );
 
         r.DrawRectangle(@intFromFloat(camera.target.x - SCREEN_WIDTH), GROUND_LEVEL, SCREEN_WIDTH * 2, 500, r.BLACK);
 
