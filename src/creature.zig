@@ -1,5 +1,6 @@
 const std = @import("std");
 const r = @import("cHeaders.zig").raylib;
+const utils = @import("utils.zig");
 
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
@@ -36,14 +37,14 @@ const random_values = struct {
 const Node = struct {
     const radius = 10;
 
-    pos: r.Vector2 = r.Vector2{},
-    velocity: r.Vector2 = r.Vector2{},
+    pos: @Vector(2, f32) = @splat(0),
+    velocity: @Vector(2, f32) = @splat(0),
     elasticity: f32,
     friction: f32,
     onGround: bool = false,
 
     pub fn isGrounded(self: Node, ground_level: f32) bool {
-        return self.pos.y + Node.radius >= ground_level;
+        return self.pos[1] + Node.radius >= ground_level;
     }
 };
 const Muscle = struct {
@@ -57,6 +58,7 @@ const Muscle = struct {
 pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comptime_float, RELAX_GRAPH_ITERS: comptime_int) type {
     return struct {
         const Creature = @This();
+        const damping: @Vector(2, f32) = @splat(DAMPING);
         nodes: ArrayList(Node),
         edges: ArrayList(Muscle),
         clock: u16 = 0,
@@ -69,15 +71,13 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         pub fn tick_values(self: *Creature, ground_level: comptime_float, gravity: comptime_float) void {
             self.clock +%= 1;
             for (self.nodes.items) |*node| {
-                node.velocity.y += gravity;
-                node.pos.x += node.velocity.x;
-                node.pos.y += node.velocity.y;
-                node.velocity.x *= DAMPING;
-                node.velocity.y *= DAMPING;
+                node.velocity[1] += gravity;
+                node.pos += node.velocity;
+                node.velocity *= damping;
                 if (node.isGrounded(ground_level)) {
-                    node.pos.y = ground_level - Node.radius + 1; // can't be the exact ground position because of rounding errors
-                    node.velocity.x *= node.friction;
-                    if (!node.onGround) node.velocity.y *= -node.elasticity;
+                    node.pos[1] = ground_level - Node.radius + 1; // can't be the exact ground position because of rounding errors
+                    node.velocity[0] *= node.friction;
+                    if (!node.onGround) node.velocity[1] *= -node.elasticity;
                     node.onGround = true;
                 } else {
                     node.onGround = false;
@@ -90,54 +90,50 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 const node1 = &self.nodes.items[edge.nodes[0]];
                 const node2 = &self.nodes.items[edge.nodes[1]];
 
-                var direction_vec = r.Vector2Subtract(node2.pos, node1.pos);
-                const length = r.Vector2Length(direction_vec);
+                var direction_vec = node2.pos - node1.pos;
+
+                const length = @sqrt(@reduce(.Add, direction_vec * direction_vec));
 
                 const force = edge.strength * (length - if (edge.is_long) edge.long_length else edge.short_length);
 
-                direction_vec.x *= 1 / length * force;
-                direction_vec.y *= 1 / length * force;
+                direction_vec *= @splat(1 / length * force);
 
-                node1.velocity.x += direction_vec.x;
-                node1.velocity.y += direction_vec.y;
-                node2.velocity.x -= direction_vec.x;
-                node2.velocity.y -= direction_vec.y;
+                node1.velocity += direction_vec;
+                node2.velocity -= direction_vec;
             }
         }
 
         pub fn draw(self: Creature) void {
             for (self.edges.items) |edge| {
                 r.DrawLineEx(
-                    self.nodes.items[edge.nodes[0]].pos,
-                    self.nodes.items[edge.nodes[1]].pos,
+                    utils.v2FromVector(self.nodes.items[edge.nodes[0]].pos),
+                    utils.v2FromVector(self.nodes.items[edge.nodes[1]].pos),
                     if (edge.is_long) 15 else 10,
                     r.BLACK,
                 );
             }
             for (self.nodes.items) |node| {
-                r.DrawCircleV(node.pos, Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
-                r.DrawCircleLinesV(node.pos, Node.radius, r.BLACK);
+                r.DrawCircleV(utils.v2FromVector(node.pos), Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
+                r.DrawCircleLinesV(utils.v2FromVector(node.pos), Node.radius, r.BLACK);
             }
         }
 
-        pub fn getAvgPos(self: Creature) r.Vector2 {
-            var avg = r.Vector2{};
+        pub fn getAvgPos(self: Creature) @Vector(2, f32) {
+            var avg: @Vector(2, f32) = @splat(0);
             for (self.nodes.items) |n| {
-                avg.x += n.pos.x;
-                avg.y += n.pos.y;
+                avg += n.pos;
             }
-            avg.x /= @floatFromInt(self.nodes.items.len);
-            avg.y /= @floatFromInt(self.nodes.items.len);
+
+            avg /= @splat(@floatFromInt(self.nodes.items.len));
             return avg;
         }
 
         pub fn resetValues(self: *Creature) void {
             c_prng.seed(self.seed);
             for (self.nodes.items) |*node| {
-                node.velocity.x = 0;
-                node.velocity.y = 0;
-                node.pos.x = c_random.float(f32);
-                node.pos.y = c_random.float(f32);
+                node.velocity = @splat(0);
+                node.pos[0] = c_random.float(f32);
+                node.pos[1] = c_random.float(f32);
             }
             for (self.edges.items) |*edge| {
                 edge.is_long = false;
@@ -153,12 +149,12 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
 
             var lowest_node = self.nodes.items[0];
             for (self.nodes.items[1..]) |node| {
-                if (node.pos.y > lowest_node.pos.y) lowest_node = node;
+                if (node.pos[1] > lowest_node.pos[1]) lowest_node = node;
             }
 
-            const offset = GROUND_LEVEL - lowest_node.pos.y - Node.radius;
+            const offset = GROUND_LEVEL - lowest_node.pos[1] - Node.radius;
             for (self.nodes.items) |*node| {
-                node.pos.y += offset;
+                node.pos[1] += offset;
             }
         }
 
@@ -167,7 +163,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..ticks) |_| {
                 self.tick();
             }
-            const x = self.getAvgPos().x;
+            const x = self.getAvgPos()[0];
             self.fitness = if (x < 0) 10 * x else @sqrt(x);
             self.fitness *= @floatFromInt(self.edges.items.len);
         }
