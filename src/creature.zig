@@ -14,13 +14,13 @@ const random_values = struct {
         return random.int(u64);
     }
     fn elasticity() f32 {
-        return random.float(f32) / 10;
+        return random.float(f32) * 0.1;
     }
     fn friction() f32 {
         return random.float(f32);
     }
     fn strength() f32 {
-        return random.float(f32) * 100 + 50;
+        return random.float(f32) * 0.1;
     }
     fn long_length() f32 {
         return random.float(f32) * (100 - 10) + 10;
@@ -60,7 +60,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         nodes: ArrayList(Node),
         edges: ArrayList(Muscle),
         clock: u16 = 0,
-        fitness: f32 = 0,
+        fitness: f64 = 0,
         seed: u64,
 
         pub fn tick(self: *Creature) void {
@@ -69,8 +69,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         pub fn tick_values(self: *Creature, ground_level: comptime_float, gravity: comptime_float) void {
             self.clock +%= 1;
             for (self.nodes.items) |*node| {
-                if (!node.isGrounded(ground_level)) {
-                    node.velocity.y += gravity;
+                node.velocity.y += gravity;
                 node.pos.x += node.velocity.x;
                 node.pos.y += node.velocity.y;
                 node.velocity.x *= DAMPING;
@@ -94,7 +93,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 var direction_vec = r.Vector2Subtract(node2.pos, node1.pos);
                 const length = r.Vector2Length(direction_vec);
 
-                const force = edge.strength * std.math.tanh((length - if (edge.is_long) edge.long_length else edge.short_length) / 1000);
+                const force = edge.strength * (length - if (edge.is_long) edge.long_length else edge.short_length);
 
                 direction_vec.x *= 1 / length * force;
                 direction_vec.y *= 1 / length * force;
@@ -116,7 +115,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 );
             }
             for (self.nodes.items) |node| {
-                r.DrawCircleV(node.pos, node.radius, r.RED);
+                r.DrawCircleV(node.pos, Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
+                r.DrawCircleLinesV(node.pos, Node.radius, r.BLACK);
             }
         }
 
@@ -167,7 +167,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..ticks) |_| {
                 self.tick();
             }
-            self.fitness = self.getAvgPos().x;
+            const x = self.getAvgPos().x;
+            self.fitness = if (x < 0) 10 * x else @sqrt(x);
         }
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
@@ -222,7 +223,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 if (random.float(f32) < ind_mut_chance) e.switch_at = random_values.switch_at();
             }
 
-            if (random.float(f32) < ind_mut_chance) {
+            if (random.float(f32) < ind_mut_chance / 10) {
                 if (random.boolean()) {
                     // remove node
                     if (self.nodes.items.len > 0) {
@@ -263,7 +264,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 }
             }
 
-            if (random.float(f32) < ind_mut_chance) {
+            if (random.float(f32) < ind_mut_chance / 10) {
                 if (random.boolean()) {
                     // remove edge
                     if (self.edges.items.len > 0) {

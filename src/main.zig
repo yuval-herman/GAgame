@@ -5,22 +5,22 @@ const bufPrint = std.fmt.bufPrint;
 
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 500;
-const GROUND_LEVEL = SCREEN_HEIGHT - 100;
-const GRAVITY = 0.1;
+const GROUND_LEVEL = SCREEN_HEIGHT / 2 - 100;
+const GRAVITY = 0.7;
 const DAMPING = 0.99;
 const EVALUATION_TICKS = 60 * 10;
-const SELECTION_RATE = 5;
-const MUTATION_RATE = 0.2;
+const SELECTION_RATE = 10;
+const MUTATION_RATE = 0.1;
 const IND_MUTATION_RATE = 0.5;
-const GENERATIONS = 10;
+const GENERATIONS = 50;
 const RELAX_GRAPH_ITERS = 100;
 const POPULATION_SIZE = 1000;
-const HOF_SIZE = 5;
+const HOF_SIZE = 1;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
-var textBuffer: [1000]u8 = undefined;
+var textBuffer: [10000]u8 = undefined;
 
 pub fn main() !void {
     r.SetTraceLogLevel(r.LOG_WARNING);
@@ -46,7 +46,7 @@ pub fn main() !void {
         }
     }
     for (&pop) |*c| {
-        c.* = try Creature.createRandom(random.intRangeAtMost(usize, 2, 5), random.float(f32), allocator);
+        c.* = try Creature.createRandom(random.intRangeAtMost(usize, 3, 5), random.float(f32), allocator);
     }
 
     for (0..GENERATIONS) |gen| {
@@ -56,7 +56,6 @@ pub fn main() !void {
         std.mem.sort(Creature, &pop, {}, creatureComp);
         best_history[gen] = try pop[0].clone();
 
-        const avg = pop[0].getAvgPos();
         var avg_edges: usize = 0;
         var avg_nodes: usize = 0;
         for (pop) |cs| {
@@ -65,7 +64,9 @@ pub fn main() !void {
         }
         avg_edges /= pop.len;
         avg_nodes /= pop.len;
-        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), edges: {}, nodes: {}\n", .{ gen, avg.x, avg.y, avg_nodes, avg_edges });
+
+        const avg = pop[0].getAvgPos();
+        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{ gen, avg.x, avg.y, pop[0].fitness, avg_edges, avg_nodes });
 
         for (&newPop) |*nc| {
             const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
@@ -92,17 +93,17 @@ pub fn main() !void {
     };
     var c: Creature = undefined;
     var timer: u16 = 0;
-    var cI: usize = GENERATIONS - 10;
+    var cI: usize = 0;
     var changeC = false;
 
     while (!r.WindowShouldClose()) : (timer +%= 1) // Detect window close button or ESC key
     {
-        if (r.IsKeyPressed(r.KEY_RIGHT) and cI < best_history.len - 1) {
+        if ((r.IsKeyPressed(r.KEY_RIGHT) or r.IsKeyDown(r.KEY_RIGHT)) and cI < best_history.len - 1) {
             cI += 1;
             changeC = true;
             timer = 1;
         }
-        if (r.IsKeyPressed(r.KEY_LEFT) and cI >= 1) {
+        if ((r.IsKeyPressed(r.KEY_LEFT) or r.IsKeyDown(r.KEY_LEFT)) and cI >= 1) {
             cI -= 1;
             changeC = true;
             timer = 1;
@@ -124,7 +125,7 @@ pub fn main() !void {
 
         var text_buffer_idx: usize = 0;
         var text_slice: []u8 = undefined;
-        for (0..100) |i| {
+        for (0..200) |i| {
             const font_size = 30;
             var sign = r.Rectangle{
                 .x = @floatFromInt(i * 250),
