@@ -34,14 +34,16 @@ const random_values = struct {
 };
 
 const Node = struct {
+    const radius = 10;
+
     pos: r.Vector2 = r.Vector2{},
     velocity: r.Vector2 = r.Vector2{},
-    radius: f16 = 10,
     elasticity: f32,
     friction: f32,
+    onGround: bool = false,
 
     pub fn isGrounded(self: Node, ground_level: f32) bool {
-        return self.pos.y + self.radius >= ground_level;
+        return self.pos.y + Node.radius >= ground_level;
     }
 };
 const Muscle = struct {
@@ -69,15 +71,18 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (self.nodes.items) |*node| {
                 if (!node.isGrounded(ground_level)) {
                     node.velocity.y += gravity;
-                } else {
-                    node.pos.y = ground_level - node.radius + 1; // can't be the exact ground position because of rounding errors
-                    node.velocity.x *= node.friction;
-                    node.velocity.y *= -node.elasticity;
-                }
                 node.pos.x += node.velocity.x;
                 node.pos.y += node.velocity.y;
                 node.velocity.x *= DAMPING;
                 node.velocity.y *= DAMPING;
+                if (node.isGrounded(ground_level)) {
+                    node.pos.y = ground_level - Node.radius + 1; // can't be the exact ground position because of rounding errors
+                    node.velocity.x *= node.friction;
+                    if (!node.onGround) node.velocity.y *= -node.elasticity;
+                    node.onGround = true;
+                } else {
+                    node.onGround = false;
+                }
             }
 
             for (self.edges.items) |*edge| {
