@@ -148,6 +148,18 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..RELAX_GRAPH_ITERS) |_| {
                 self.tick_values(99999, 0);
             }
+
+            self.clock = 0;
+
+            var lowest_node = self.nodes.items[0];
+            for (self.nodes.items[1..]) |node| {
+                if (node.pos.y > lowest_node.pos.y) lowest_node = node;
+            }
+
+            const offset = GROUND_LEVEL - lowest_node.pos.y - Node.radius;
+            for (self.nodes.items) |*node| {
+                node.pos.y += offset;
+            }
         }
 
         pub fn evaluate(self: *Creature, ticks: u16) void {
