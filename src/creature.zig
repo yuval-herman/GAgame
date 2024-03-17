@@ -169,6 +169,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
             const x = self.getAvgPos().x;
             self.fitness = if (x < 0) 10 * x else @sqrt(x);
+            self.fitness *= @floatFromInt(self.edges.items.len);
         }
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
