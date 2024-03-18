@@ -8,18 +8,18 @@ const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT / 2 - 100;
 var fps: c_int = 10;
 
-const GRAVITY = 0.5;
-const DAMPING = 0.99;
+const GRAVITY = 1;
+const DAMPING = 0.9;
 
 const EVALUATION_TICKS = 60 * 15;
 const RELAX_GRAPH_ITERS = 100;
 
-const SELECTION_RATE = 6;
-const MUTATION_RATE = 0.3;
-const IND_MUTATION_RATE = 0.3;
+const TOURNAMENT_SIZE = 30;
+const MUTATION_RATE = 0.2;
+const IND_MUTATION_RATE = 0.05;
 
 const POPULATION_SIZE = 1000;
-const GENERATIONS = 20;
+const GENERATIONS = 100;
 const HOF_SIZE = 1;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
@@ -186,10 +186,12 @@ fn creatureComp(context: void, a: Creature, b: Creature) bool {
 }
 
 fn select(pop: []Creature) [2]Creature {
-    const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
-    var b = a;
-    while (a == b) b = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
-    return .{ pop[a], pop[b] };
+    var participants: [TOURNAMENT_SIZE]usize = undefined;
+    for (&participants) |*participant| {
+        participant.* = random.intRangeLessThan(usize, 0, pop.len);
+    }
+    std.mem.sort(usize, &participants, {}, std.sort.desc(usize));
+    return .{ pop[participants[0]], pop[participants[1]] };
 }
 
 fn evolve(pop: []Creature) !Creature {
