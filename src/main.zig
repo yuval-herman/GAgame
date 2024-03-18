@@ -19,14 +19,13 @@ const MUTATION_RATE = 0.3;
 const IND_MUTATION_RATE = 0.3;
 
 const POPULATION_SIZE = 1000;
-const GENERATIONS = 100;
+const GENERATIONS = 20;
 const HOF_SIZE = 1;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 var textBuffer: [10000]u8 = undefined;
-const Timer = std.time.Timer;
 
 pub fn main() !void {
     r.SetTraceLogLevel(r.LOG_WARNING);
@@ -40,12 +39,6 @@ pub fn main() !void {
     r.SetTargetFPS(fps);
 
     var pop: [POPULATION_SIZE]Creature = undefined;
-    var newPop: [pop.len]Creature = undefined;
-    defer {
-        for (&newPop) |*c| {
-            c.deinit();
-        }
-    }
     var best_history: [GENERATIONS]Creature = undefined;
     defer {
         for (&best_history) |*c| {
@@ -54,25 +47,12 @@ pub fn main() !void {
     }
     for (&pop) |*c| {
         c.* = try Creature.createRandom(random.intRangeAtMost(usize, 3, 5), random.float(f32), allocator);
+        c.evaluate(EVALUATION_TICKS);
     }
-
-    var t = try Timer.start();
-    const Timings = struct {
-        evaluate: u64 = 0,
-        mutate: u64 = 0,
-        crossover: u64 = 0,
-    };
-    var timings = Timings{};
+    std.mem.sort(Creature, &pop, {}, creatureComp);
 
     for (0..GENERATIONS) |gen| {
-        t.reset();
-        for (pop[HOF_SIZE..]) |*c| {
-            c.evaluate(EVALUATION_TICKS);
-        }
-        timings.evaluate += t.read();
-
-        std.mem.sort(Creature, &pop, {}, creatureComp);
-        best_history[gen] = try pop[0].clone();
+        best_history[gen] = try evolve(&pop);
 
         var avg_edges: usize = 0;
         var avg_nodes: usize = 0;
@@ -83,34 +63,10 @@ pub fn main() !void {
         avg_edges /= pop.len;
         avg_nodes /= pop.len;
 
-        const avg = pop[0].getAvgPos();
+        const avg = best_history[gen].getAvgPos();
         std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{ gen, avg[0], avg[1], pop[0].fitness, avg_edges, avg_nodes });
-
-        for (&newPop) |*nc| {
-            const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
-            var b = a;
-            while (a == b) b = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
-            t.reset();
-            nc.* = try pop[a].crossover(pop[b]);
-            timings.crossover += t.lap();
-            if (random.float(f32) < MUTATION_RATE) try nc.mutate(IND_MUTATION_RATE);
-            timings.mutate += t.read();
-        }
-
-        for (pop[HOF_SIZE..]) |*c| {
-            c.deinit();
-        }
-        @memcpy(pop[HOF_SIZE..], newPop[0 .. pop.len - HOF_SIZE]);
     }
-    for (&pop) |*c| {
-        c.evaluate(EVALUATION_TICKS);
-    }
-    std.mem.sort(Creature, &pop, {}, creatureComp);
-    std.debug.print("evaluate: {d:.2} crossover: {d:.2} mutate: {d:.2}\n", .{
-        @as(f64, @floatFromInt(timings.evaluate)) * 1e-9,
-        @as(f64, @floatFromInt(timings.crossover)) * 1e-9,
-        @as(f64, @floatFromInt(timings.mutate)) * 1e-9,
-    });
+
     var camera = r.Camera2D{
         .zoom = 1,
         .offset = .{ .x = SCREEN_WIDTH / 2, .y = SCREEN_HEIGHT / 2 },
@@ -229,32 +185,31 @@ fn creatureComp(context: void, a: Creature, b: Creature) bool {
     return a.fitness > b.fitness;
 }
 
-const testing = std.testing;
-test "memory leaks" {
-    var a = try Creature.createRandom(4, 0.5, testing.allocator);
-    var b = try Creature.createRandom(4, 0.5, testing.allocator);
-    var c = try a.crossover(b);
+fn select(pop: []Creature) [2]Creature {
+    const a = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
+    var b = a;
+    while (a == b) b = random.intRangeLessThan(usize, 0, pop.len / SELECTION_RATE);
+    return .{ pop[a], pop[b] };
+}
 
-    defer a.deinit();
-    defer b.deinit();
-    defer c.deinit();
+fn evolve(pop: []Creature) !Creature {
+    var newPop: [POPULATION_SIZE]Creature = undefined;
 
-    var arr: [10]Creature = undefined;
-    var arr2: [10]Creature = undefined;
-    for (&arr) |*d| {
-        d.* = try Creature.createRandom(4, 0.5, testing.allocator);
-    }
-    for (0..3) |_| {
-        for (&arr2) |*d| {
-            d.* = try arr[0].crossover(arr[1]);
-        }
-        for (&arr) |*d| {
-            d.deinit();
-        }
-        arr = arr2;
+    for (&newPop) |*nc| {
+        const selected = select(pop);
+        nc.* = try selected[0].crossover(selected[1]);
+        if (random.float(f32) < MUTATION_RATE) try nc.mutate(IND_MUTATION_RATE);
     }
 
-    for (&arr2) |*d| {
-        d.deinit();
+    for (pop[HOF_SIZE..]) |*c| {
+        c.deinit();
     }
+    @memcpy(pop[HOF_SIZE..], newPop[0 .. pop.len - HOF_SIZE]);
+
+    for (pop[HOF_SIZE..]) |*c| {
+        c.evaluate(EVALUATION_TICKS);
+    }
+    std.mem.sort(Creature, pop, {}, creatureComp);
+
+    return try pop[0].clone();
 }
