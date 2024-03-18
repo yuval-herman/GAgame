@@ -15,22 +15,22 @@ const random_values = struct {
         return random.int(u64);
     }
     fn elasticity() f32 {
-        return random.float(f32) * 0.1;
+        return random.float(f32) * 0.5;
     }
     fn friction() f32 {
         return random.float(f32);
     }
     fn strength() f32 {
-        return random.float(f32) * 0.1;
+        return random.float(f32) * 0.2;
     }
     fn long_length() f32 {
-        return random.float(f32) * (100 - 10) + 10;
+        return random.float(f32) * 200 + 50;
     }
     fn short_length() f32 {
         return long_length();
     }
     fn switch_at() u8 {
-        return random.intRangeAtMost(u8, 10, 255);
+        return random.intRangeAtMost(u8, 10, std.math.maxInt(u8));
     }
 };
 
@@ -93,10 +93,11 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 var direction_vec = node2.pos - node1.pos;
 
                 const length = @sqrt(@reduce(.Add, direction_vec * direction_vec));
+                const target_length = if (edge.is_long) edge.long_length else edge.short_length;
 
-                const force = edge.strength * (length - if (edge.is_long) edge.long_length else edge.short_length);
+                const force = edge.strength * (length - target_length);
 
-                direction_vec *= @splat(1 / length * force);
+                direction_vec *= @splat(1 / length * std.math.clamp(force, -2, 2));
 
                 node1.velocity += direction_vec;
                 node2.velocity -= direction_vec;
@@ -108,13 +109,20 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 r.DrawLineEx(
                     utils.v2FromVector(self.nodes.items[edge.nodes[0]].pos),
                     utils.v2FromVector(self.nodes.items[edge.nodes[1]].pos),
-                    if (edge.is_long) 15 else 10,
+                    if (edge.is_long) 20 else 10,
                     r.BLACK,
                 );
             }
             for (self.nodes.items) |node| {
                 r.DrawCircleV(utils.v2FromVector(node.pos), Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
                 r.DrawCircleLinesV(utils.v2FromVector(node.pos), Node.radius, r.BLACK);
+
+                r.DrawLineEx(
+                    utils.v2FromVector(node.pos),
+                    utils.v2FromVector(node.pos + node.velocity),
+                    5,
+                    r.RED,
+                );
             }
         }
 
@@ -129,6 +137,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         }
 
         pub fn resetValues(self: *Creature) void {
+            if (self.nodes.items.len == 0) return;
             c_prng.seed(self.seed);
             for (self.nodes.items) |*node| {
                 node.velocity = @splat(0);
@@ -163,9 +172,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             for (0..ticks) |_| {
                 self.tick();
             }
-            const x = self.getAvgPos()[0];
-            self.fitness = if (x < 0) 10 * x else @sqrt(x);
-            self.fitness *= @floatFromInt(self.edges.items.len);
+            self.fitness = self.getAvgPos()[0];
         }
 
         pub fn crossover(self: Creature, other: Creature) !Creature {
