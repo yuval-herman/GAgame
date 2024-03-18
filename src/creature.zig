@@ -15,7 +15,7 @@ const random_values = struct {
         return random.int(u64);
     }
     fn elasticity() f32 {
-        return random.float(f32) * 0.5;
+        return random.float(f32);
     }
     fn friction() f32 {
         return random.float(f32);
@@ -24,13 +24,16 @@ const random_values = struct {
         return random.float(f32) * 0.2;
     }
     fn long_length() f32 {
-        return random.float(f32) * 200 + 50;
+        return random.float(f32) * 200;
     }
     fn short_length() f32 {
         return long_length();
     }
-    fn switch_at() u8 {
-        return random.intRangeAtMost(u8, 10, std.math.maxInt(u8));
+    fn long_time() u8 {
+        return random.intRangeAtMost(u8, 1, std.math.maxInt(u8));
+    }
+    fn short_time() u8 {
+        return long_time();
     }
 };
 
@@ -52,7 +55,8 @@ const Muscle = struct {
     strength: f32,
     long_length: f32,
     short_length: f32,
-    switch_at: u8,
+    long_time: u8,
+    short_time: u8,
     is_long: bool = false,
 };
 pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comptime_float, RELAX_GRAPH_ITERS: comptime_int) type {
@@ -61,7 +65,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         const damping: @Vector(2, f32) = @splat(DAMPING);
         nodes: ArrayList(Node),
         edges: ArrayList(Muscle),
-        clock: u16 = 0,
+        clock: u8 = 0,
         fitness: f64 = 0,
         seed: u64,
 
@@ -85,7 +89,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
             }
 
             for (self.edges.items) |*edge| {
-                if (self.clock % edge.switch_at == 0) edge.is_long = !edge.is_long;
+                if (self.clock % (if (edge.is_long) edge.long_time else edge.short_time) == 0) edge.is_long = !edge.is_long;
 
                 const node1 = &self.nodes.items[edge.nodes[0]];
                 const node2 = &self.nodes.items[edge.nodes[1]];
@@ -224,7 +228,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                 if (random.float(f32) < ind_mut_chance) e.long_length = random_values.long_length();
                 if (random.float(f32) < ind_mut_chance) e.short_length = random_values.short_length();
                 if (random.float(f32) < ind_mut_chance) e.strength = random_values.strength();
-                if (random.float(f32) < ind_mut_chance) e.switch_at = random_values.switch_at();
+                if (random.float(f32) < ind_mut_chance) e.long_time = random_values.long_time();
+                if (random.float(f32) < ind_mut_chance) e.short_time = random_values.short_time();
             }
 
             if (random.float(f32) < ind_mut_chance / 10) {
@@ -258,7 +263,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .long_length = random_values.long_length(),
                             .short_length = random_values.short_length(),
                             .strength = random_values.strength(),
-                            .switch_at = random_values.switch_at(),
+                            .long_time = random_values.long_time(),
+                            .short_time = random_values.short_time(),
                             .nodes = .{
                                 random.uintLessThan(usize, self.nodes.items.len - 1),
                                 self.nodes.items.len - 1,
@@ -284,7 +290,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .long_length = random_values.long_length(),
                             .short_length = random_values.short_length(),
                             .strength = random_values.strength(),
-                            .switch_at = random_values.switch_at(),
+                            .long_time = random_values.long_time(),
+                            .short_time = random_values.short_time(),
                             .nodes = .{ a, b },
                         });
                     }
@@ -345,7 +352,8 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                             .long_length = @max(n1, n2),
                             .short_length = @min(n1, n2),
                             .strength = random_values.strength(),
-                            .switch_at = random_values.switch_at(),
+                            .long_time = random_values.long_time(),
+                            .short_time = random_values.short_time(),
                         });
                     }
                 }
