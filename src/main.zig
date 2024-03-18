@@ -6,19 +6,20 @@ const bufPrint = std.fmt.bufPrint;
 const SCREEN_WIDTH = 1000;
 const SCREEN_HEIGHT = 500;
 const GROUND_LEVEL = SCREEN_HEIGHT / 2 - 100;
+var fps: c_int = 10;
 
-const GRAVITY = 2;
+const GRAVITY = 0.5;
 const DAMPING = 0.99;
 
-const EVALUATION_TICKS = 60 * 30;
+const EVALUATION_TICKS = 60 * 15;
 const RELAX_GRAPH_ITERS = 100;
 
-const SELECTION_RATE = 10;
-const MUTATION_RATE = 0.2;
+const SELECTION_RATE = 6;
+const MUTATION_RATE = 0.3;
 const IND_MUTATION_RATE = 0.3;
 
-const POPULATION_SIZE = 100;
-const GENERATIONS = 50;
+const POPULATION_SIZE = 1000;
+const GENERATIONS = 100;
 const HOF_SIZE = 1;
 
 const Creature = @import("creature.zig").init(GROUND_LEVEL, GRAVITY, DAMPING, RELAX_GRAPH_ITERS);
@@ -32,10 +33,11 @@ pub fn main() !void {
     assert(HOF_SIZE < POPULATION_SIZE);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
     r.InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "my window! WOOOOOOOOOOOW!!!!!!");
     defer r.CloseWindow();
-    r.SetTargetFPS(60);
+    r.SetTargetFPS(fps);
 
     var pop: [POPULATION_SIZE]Creature = undefined;
     var newPop: [pop.len]Creature = undefined;
@@ -114,31 +116,40 @@ pub fn main() !void {
         .offset = .{ .x = SCREEN_WIDTH / 2, .y = SCREEN_HEIGHT / 2 },
     };
     var c: Creature = undefined;
-    var timer: u16 = 0;
     var cI: usize = 0;
-    var changeC = false;
+    var changeC = true;
 
-    while (!r.WindowShouldClose()) : (timer +%= 1) // Detect window close button or ESC key
+    while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
         if ((r.IsKeyPressed(r.KEY_RIGHT) or r.IsKeyDown(r.KEY_RIGHT)) and cI < best_history.len - 1) {
             cI += 1;
             changeC = true;
-            timer = 1;
         }
         if ((r.IsKeyPressed(r.KEY_LEFT) or r.IsKeyDown(r.KEY_LEFT)) and cI >= 1) {
             cI -= 1;
             changeC = true;
-            timer = 1;
         }
-        if (timer % (EVALUATION_TICKS) == 0) {
+        if (r.IsKeyDown(r.KEY_DOWN) and fps > 1) {
+            fps -= 1;
+            r.SetTargetFPS(fps);
+        }
+        if (r.IsKeyDown(r.KEY_UP) and fps < std.math.maxInt(c_int)) {
+            fps += 1;
+            r.SetTargetFPS(fps);
+        }
+        if (r.IsKeyDown(r.KEY_END)) {
+            cI = best_history.len - 1;
             changeC = true;
-            cI = (cI + 1) % (best_history.len - 1);
+        }
+        if (r.IsKeyDown(r.KEY_HOME)) {
+            cI = 0;
+            changeC = true;
         }
         if (changeC) {
             changeC = false;
             c = best_history[cI];
             const avg = c.getAvgPos();
-            std.debug.print("timer: {}, cI: {} avg: ({d:.2}, {d:.2})\n", .{ timer, cI, avg[0], avg[1] });
+            std.debug.print("cI: {} avg: ({d:.2}, {d:.2})\n", .{ cI, avg[0], avg[1] });
             c.resetValues();
         }
         r.BeginDrawing();
@@ -173,9 +184,16 @@ pub fn main() !void {
         c.tick();
         c.draw();
 
-        const avg_pos = c.getAvgPos();
-        camera.target.x = avg_pos[0];
-        camera.target.y = avg_pos[1];
+        var center_pos: @Vector(2, f32) = @splat(0);
+        var farthest_pos: @Vector(2, f32) = c.nodes.items[0].pos;
+        for (c.nodes.items) |n| {
+            center_pos += n.pos;
+            if (n.pos[0] < farthest_pos[0]) farthest_pos = n.pos;
+        }
+        center_pos /= @splat(@floatFromInt(c.nodes.items.len));
+        camera.target.x = center_pos[0];
+        camera.target.y = center_pos[1];
+        camera.zoom = @min(1, SCREEN_WIDTH / ((center_pos[0] - farthest_pos[0]) * 2));
 
         text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{camera.target.x});
         text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
@@ -191,7 +209,18 @@ pub fn main() !void {
         r.DrawRectangle(@intFromFloat(camera.target.x - SCREEN_WIDTH), GROUND_LEVEL, SCREEN_WIDTH * 2, 500, r.BLACK);
 
         r.EndMode2D();
+        text_slice = try bufPrint(textBuffer[text_buffer_idx..], "fps {d:.2}", .{1 / r.GetFrameTime()});
+        text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+
+        r.DrawText(
+            @ptrCast(text_slice),
+            0,
+            50,
+            20,
+            r.BLACK,
+        );
         r.EndDrawing();
+        @memset(text_slice, 0);
     }
 }
 
