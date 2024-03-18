@@ -71,7 +71,6 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
         pub fn tick_values(self: *Creature, ground_level: comptime_float, gravity: comptime_float) void {
             self.clock +%= 1;
             for (self.nodes.items) |*node| {
-                node.velocity[1] += gravity;
                 node.pos += node.velocity;
                 node.velocity *= damping;
                 if (node.isGrounded(ground_level)) {
@@ -81,6 +80,7 @@ pub fn init(GROUND_LEVEL: comptime_float, GRAVITY: comptime_float, DAMPING: comp
                     node.onGround = true;
                 } else {
                     node.onGround = false;
+                    node.velocity[1] += gravity;
                 }
             }
 
