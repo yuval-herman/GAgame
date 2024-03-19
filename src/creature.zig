@@ -9,6 +9,8 @@ const c_random = c_prng.random();
 
 const ArrayList = std.ArrayList;
 
+pub const max_strength = 2;
+
 const random_values = struct {
     fn seed() u64 {
         return random.int(u64);
@@ -20,7 +22,7 @@ const random_values = struct {
         return random.float(f32);
     }
     fn strength() f32 {
-        return random.float(f32) * 2;
+        return random.float(f32) * max_strength;
     }
     fn long_length() f32 {
         return random.float(f32) * 200 + 10;
@@ -95,7 +97,7 @@ pub const Creature = struct {
 
             const force = edge.strength * (length - target_length);
 
-            direction_vec *= @splat(1 / length * std.math.clamp(force, -2, 2));
+            direction_vec *= @splat(1 / length * std.math.clamp(force, -max_strength, max_strength));
 
             node1.velocity += direction_vec;
             node2.velocity -= direction_vec;

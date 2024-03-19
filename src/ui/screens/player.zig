@@ -1,6 +1,7 @@
 const std = @import("std");
 const CreaturePackage = @import("../../creature.zig");
 const Creature = CreaturePackage.Creature;
+const max_strength = CreaturePackage.max_strength;
 const Node = CreaturePackage.Node;
 const r = @import("../../cHeaders.zig").raylib;
 const utils = @import("../../utils.zig");
@@ -16,19 +17,12 @@ fn creatureDraw(c: Creature) void {
             utils.v2FromVector(c.nodes.items[edge.nodes[0]].pos),
             utils.v2FromVector(c.nodes.items[edge.nodes[1]].pos),
             if (edge.is_long) 20 else 10,
-            r.BLACK,
+            r.ColorAlpha(r.BLACK, edge.strength / max_strength),
         );
     }
     for (c.nodes.items) |node| {
         r.DrawCircleV(utils.v2FromVector(node.pos), Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
         r.DrawCircleLinesV(utils.v2FromVector(node.pos), Node.radius, r.BLACK);
-
-        r.DrawLineEx(
-            utils.v2FromVector(node.pos),
-            utils.v2FromVector(node.pos + node.velocity),
-            5,
-            r.RED,
-        );
     }
 }
 
@@ -37,16 +31,25 @@ var camera = r.Camera2D{
     .offset = .{ .x = 1000 / 2, .y = 500 / 2 },
 };
 var current_c: Creature = undefined;
-var cI: usize = 0;
+var generation: usize = 0;
 var changeC = true;
+var show_all = false;
 
 pub fn draw() !void {
-    if ((r.IsKeyPressed(r.KEY_RIGHT) or r.IsKeyDown(r.KEY_RIGHT)) and cI < G.app_state.best_history.len - 1) {
-        cI += 1;
+    if (r.IsKeyPressed(r.KEY_S)) {
+        if (!show_all) {
+            for (G.app_state.best_history.items) |*crit| {
+                crit.resetValues(G.app_state.GROUND_LEVEL, G.RELAX_GRAPH_ITERS);
+            }
+        }
+        show_all = !show_all;
+    }
+    if (r.IsKeyDown(r.KEY_RIGHT) and generation < G.app_state.best_history.items.len - 1) {
+        generation += 1;
         changeC = true;
     }
-    if ((r.IsKeyPressed(r.KEY_LEFT) or r.IsKeyDown(r.KEY_LEFT)) and cI >= 1) {
-        cI -= 1;
+    if (r.IsKeyDown(r.KEY_LEFT) and generation >= 1) {
+        generation -= 1;
         changeC = true;
     }
     if (r.IsKeyDown(r.KEY_DOWN) and G.app_state.fps > 1) {
@@ -58,19 +61,21 @@ pub fn draw() !void {
         r.SetTargetFPS(G.app_state.fps);
     }
     if (r.IsKeyDown(r.KEY_END)) {
-        cI = G.app_state.best_history.len - 1;
+        generation = G.app_state.best_history.items.len - 1;
         changeC = true;
     }
     if (r.IsKeyDown(r.KEY_HOME)) {
-        cI = 0;
+        generation = 0;
         changeC = true;
     }
     if (changeC) {
         changeC = false;
-        current_c = G.app_state.best_history[cI];
-        const avg = current_c.getAvgPos();
-        std.debug.print("cI: {} avg: ({d:.2}, {d:.2})\n", .{ cI, avg[0], avg[1] });
-        current_c.resetValues(G.app_state.GROUND_LEVEL, G.RELAX_GRAPH_ITERS);
+        current_c = G.app_state.best_history.items[generation];
+        if (!show_all) {
+            const avg = current_c.getAvgPos();
+            std.debug.print("cI: {} avg: ({d:.2}, {d:.2})\n", .{ generation, avg[0], avg[1] });
+            current_c.resetValues(G.app_state.GROUND_LEVEL, G.RELAX_GRAPH_ITERS);
+        }
     }
     r.BeginDrawing();
     r.ClearBackground(r.RAYWHITE);
@@ -101,8 +106,15 @@ pub fn draw() !void {
         );
     }
 
-    current_c.tick(G.app_state.GROUND_LEVEL, G.app_state.GRAVITY, G.app_state.DAMPING);
-    creatureDraw(current_c);
+    if (show_all) {
+        for (G.app_state.best_history.items) |*crit| {
+            crit.tick(G.app_state.GROUND_LEVEL, G.app_state.GRAVITY, G.app_state.DAMPING);
+            creatureDraw(crit.*);
+        }
+    } else {
+        current_c.tick(G.app_state.GROUND_LEVEL, G.app_state.GRAVITY, G.app_state.DAMPING);
+        creatureDraw(current_c);
+    }
 
     var center_pos: @Vector(2, f32) = @splat(0);
     var farthest_pos: @Vector(2, f32) = current_c.nodes.items[0].pos;
@@ -139,6 +151,16 @@ pub fn draw() !void {
         20,
         r.BLACK,
     );
+    text_slice = try bufPrint(textBuffer[text_buffer_idx..], "generation {d}", .{generation});
+    text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+
+    r.DrawText(
+        @ptrCast(text_slice),
+        0,
+        100,
+        20,
+        r.BLACK,
+    );
     r.EndDrawing();
-    @memset(text_slice, 0);
+    @memset(textBuffer[0..text_buffer_idx], 0);
 }

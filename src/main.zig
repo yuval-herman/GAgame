@@ -13,9 +13,8 @@ const EVALUATION_TICKS = 60 * 15;
 
 const TOURNAMENT_SIZE = 30;
 const MUTATION_RATE = 0.2;
-const IND_MUTATION_RATE = 0.01;
+const IND_MUTATION_RATE = 0.05;
 
-const GENERATIONS = G.GENERATIONS;
 const POPULATION_SIZE = 1000;
 const HOF_SIZE = 1;
 
@@ -41,25 +40,35 @@ pub fn main() !void {
     }
     std.mem.sort(Creature, &pop, {}, creatureComp);
 
-    for (0..GENERATIONS) |gen| {
-        G.app_state.best_history[gen] = try evolve(&pop);
+    var gen: usize = 0;
 
-        var avg_edges: usize = 0;
-        var avg_nodes: usize = 0;
-        for (pop) |cs| {
-            avg_edges += cs.edges.items.len;
-            avg_nodes += cs.nodes.items.len;
-        }
-        avg_edges /= pop.len;
-        avg_nodes /= pop.len;
-
-        const avg = G.app_state.best_history[gen].getAvgPos();
-        std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{ gen, avg[0], avg[1], pop[0].fitness, avg_edges, avg_nodes });
-    }
-
+    try G.app_state.best_history.append(try evolve(&pop));
+    gen += 1;
+    var evolve_toggle = false;
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
-        try Player.draw();
+        if (r.IsKeyPressed(r.KEY_SPACE)) {
+            evolve_toggle = !evolve_toggle;
+        }
+        if (evolve_toggle) {
+            try G.app_state.best_history.append(try evolve(&pop));
+
+            var avg_edges: usize = 0;
+            var avg_nodes: usize = 0;
+            for (pop) |cs| {
+                avg_edges += cs.edges.items.len;
+                avg_nodes += cs.nodes.items.len;
+            }
+            avg_edges /= pop.len;
+            avg_nodes /= pop.len;
+
+            const avg = G.app_state.best_history.items[gen].getAvgPos();
+            std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{ gen, avg[0], avg[1], pop[0].fitness, avg_edges, avg_nodes });
+            gen += 1;
+        }
+        if (gen != 0) {
+            try Player.draw();
+        }
     }
 }
 
