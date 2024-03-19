@@ -1,0 +1,144 @@
+const std = @import("std");
+const CreaturePackage = @import("../../creature.zig");
+const Creature = CreaturePackage.Creature;
+const Node = CreaturePackage.Node;
+const r = @import("../../cHeaders.zig").raylib;
+const utils = @import("../../utils.zig");
+const G = @import("../../global_state.zig");
+
+const bufPrint = std.fmt.bufPrint;
+
+var textBuffer: [10000]u8 = undefined;
+
+fn creatureDraw(c: Creature) void {
+    for (c.edges.items) |edge| {
+        r.DrawLineEx(
+            utils.v2FromVector(c.nodes.items[edge.nodes[0]].pos),
+            utils.v2FromVector(c.nodes.items[edge.nodes[1]].pos),
+            if (edge.is_long) 20 else 10,
+            r.BLACK,
+        );
+    }
+    for (c.nodes.items) |node| {
+        r.DrawCircleV(utils.v2FromVector(node.pos), Node.radius, r.ColorBrightness(r.WHITE, node.friction * 2 - 1));
+        r.DrawCircleLinesV(utils.v2FromVector(node.pos), Node.radius, r.BLACK);
+
+        r.DrawLineEx(
+            utils.v2FromVector(node.pos),
+            utils.v2FromVector(node.pos + node.velocity),
+            5,
+            r.RED,
+        );
+    }
+}
+
+var camera = r.Camera2D{
+    .zoom = 1,
+    .offset = .{ .x = 1000 / 2, .y = 500 / 2 },
+};
+var current_c: Creature = undefined;
+var cI: usize = 0;
+var changeC = true;
+
+pub fn draw() !void {
+    if ((r.IsKeyPressed(r.KEY_RIGHT) or r.IsKeyDown(r.KEY_RIGHT)) and cI < G.app_state.best_history.len - 1) {
+        cI += 1;
+        changeC = true;
+    }
+    if ((r.IsKeyPressed(r.KEY_LEFT) or r.IsKeyDown(r.KEY_LEFT)) and cI >= 1) {
+        cI -= 1;
+        changeC = true;
+    }
+    if (r.IsKeyDown(r.KEY_DOWN) and G.app_state.fps > 1) {
+        G.app_state.fps -= 1;
+        r.SetTargetFPS(G.app_state.fps);
+    }
+    if (r.IsKeyDown(r.KEY_UP) and G.app_state.fps < std.math.maxInt(c_int)) {
+        G.app_state.fps += 1;
+        r.SetTargetFPS(G.app_state.fps);
+    }
+    if (r.IsKeyDown(r.KEY_END)) {
+        cI = G.app_state.best_history.len - 1;
+        changeC = true;
+    }
+    if (r.IsKeyDown(r.KEY_HOME)) {
+        cI = 0;
+        changeC = true;
+    }
+    if (changeC) {
+        changeC = false;
+        current_c = G.app_state.best_history[cI];
+        const avg = current_c.getAvgPos();
+        std.debug.print("cI: {} avg: ({d:.2}, {d:.2})\n", .{ cI, avg[0], avg[1] });
+        current_c.resetValues(G.app_state.GROUND_LEVEL, G.RELAX_GRAPH_ITERS);
+    }
+    r.BeginDrawing();
+    r.ClearBackground(r.RAYWHITE);
+    r.BeginMode2D(camera);
+
+    var text_buffer_idx: usize = 0;
+    var text_slice: []u8 = undefined;
+    for (0..200) |i| {
+        const font_size = 30;
+        var sign = r.Rectangle{
+            .x = @floatFromInt(i * 250),
+            .y = G.app_state.GROUND_LEVEL - 150,
+            .height = 50,
+            .width = undefined,
+        };
+        text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{sign.x / 100});
+        text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+        const text: [*c]u8 = @ptrCast(text_slice);
+        const text_width: f32 = @floatFromInt(r.MeasureText(text, font_size));
+        sign.width = @max(100, text_width + 20);
+        r.DrawRectangleRec(sign, r.LIGHTGRAY);
+        r.DrawText(
+            text,
+            @intFromFloat(sign.x + sign.width / 2 - text_width / 2),
+            @intFromFloat(sign.y + sign.height / 2 - font_size / 2),
+            font_size,
+            r.BLACK,
+        );
+    }
+
+    current_c.tick(G.app_state.GROUND_LEVEL, G.app_state.GRAVITY, G.app_state.DAMPING);
+    creatureDraw(current_c);
+
+    var center_pos: @Vector(2, f32) = @splat(0);
+    var farthest_pos: @Vector(2, f32) = current_c.nodes.items[0].pos;
+    for (current_c.nodes.items) |n| {
+        center_pos += n.pos;
+        if (n.pos[0] < farthest_pos[0]) farthest_pos = n.pos;
+    }
+    center_pos /= @splat(@floatFromInt(current_c.nodes.items.len));
+    camera.target.x = center_pos[0];
+    camera.target.y = center_pos[1];
+    camera.zoom = @min(1, @as(f32, @floatFromInt(G.app_state.SCREEN_WIDTH)) / ((center_pos[0] - farthest_pos[0]) * 2));
+
+    text_slice = try bufPrint(textBuffer[text_buffer_idx..], "{d:.1}", .{camera.target.x});
+    text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+
+    r.DrawText(
+        @ptrCast(text_slice),
+        @intFromFloat(camera.target.x),
+        @intFromFloat(camera.target.y - 200),
+        20,
+        r.BLACK,
+    );
+
+    r.DrawRectangle(@as(c_int, @intFromFloat(camera.target.x)) - G.app_state.SCREEN_WIDTH, @intFromFloat(G.app_state.GROUND_LEVEL), G.app_state.SCREEN_WIDTH * 2, 500, r.BLACK);
+
+    r.EndMode2D();
+    text_slice = try bufPrint(textBuffer[text_buffer_idx..], "fps {d:.2}", .{1 / r.GetFrameTime()});
+    text_buffer_idx += text_slice.len + 1; // add one to account for c-style null termination.
+
+    r.DrawText(
+        @ptrCast(text_slice),
+        0,
+        50,
+        20,
+        r.BLACK,
+    );
+    r.EndDrawing();
+    @memset(text_slice, 0);
+}
