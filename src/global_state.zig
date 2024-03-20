@@ -3,6 +3,11 @@ const Creature = @import("creature.zig").Creature;
 
 pub const RELAX_GRAPH_ITERS = 10;
 
+pub const Screens = enum {
+    player,
+    configs,
+};
+
 pub const GlobalState = struct {
     best_history: std.ArrayList(Creature),
     SCREEN_WIDTH: c_int,
@@ -12,6 +17,7 @@ pub const GlobalState = struct {
     GRAVITY: f32,
     fps: c_int,
     tournament_size: usize,
+    screen: Screens,
 };
 
 var buf: [1000000]u8 = undefined;
@@ -26,4 +32,5 @@ pub var app_state = GlobalState{
     .GRAVITY = 1,
     .fps = 30,
     .tournament_size = std.math.pow(usize, 2, 5),
+    .screen = Screens.configs,
 };

@@ -77,8 +77,6 @@ pub fn draw() !void {
             current_c.resetValues(G.app_state.GROUND_LEVEL, G.RELAX_GRAPH_ITERS);
         }
     }
-    r.BeginDrawing();
-    r.ClearBackground(r.RAYWHITE);
     r.BeginMode2D(camera);
 
     var text_buffer_idx: usize = 0;
@@ -161,6 +159,5 @@ pub fn draw() !void {
         20,
         r.BLACK,
     );
-    r.EndDrawing();
     @memset(textBuffer[0..text_buffer_idx], 0);
 }
