@@ -73,7 +73,21 @@ pub fn main() !void {
             });
             gen += 1;
 
-            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, gen * gen / POPULATION_SIZE));
+            var bests = G.app_state.best_history.items;
+            if (bests.len > 10) {
+                bests = bests[bests.len - 10 ..];
+            }
+
+            const first_fitness = bests[0].fitness;
+            const all_equal = for (bests) |b|
+                (if (b.fitness != first_fitness) break false)
+            else
+                true;
+            if (all_equal) {
+                G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size - 2));
+            } else {
+                G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 5));
+            }
         }
         if (gen != 0) {
             try Player.draw();

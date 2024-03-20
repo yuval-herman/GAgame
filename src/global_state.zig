@@ -25,5 +25,5 @@ pub var app_state = GlobalState{
     .DAMPING = @splat(0.9),
     .GRAVITY = 1,
     .fps = 30,
-    .tournament_size = 30,
+    .tournament_size = std.math.pow(usize, 2, 5),
 };
