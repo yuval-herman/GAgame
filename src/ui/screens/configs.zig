@@ -2,7 +2,8 @@ const std = @import("std");
 const r = @import("../../cHeaders.zig").raylib;
 const G = @import("../../global_state.zig");
 
-const Button = @import("../components/buttons.zig");
+const Button = @import("../components/button.zig");
+const TextInput = @import("../components/textInput.zig");
 
 var play_button = Button{
     .text = "play",
@@ -13,8 +14,8 @@ var play_button = Button{
     },
 };
 pub fn draw() void {
-    play_button.pos.x = @divFloor(G.app_state.SCREEN_WIDTH, 2);
-    play_button.pos.y = @divFloor(G.app_state.SCREEN_HEIGHT, 2);
+    play_button.pos.x = @as(f32, @floatFromInt(G.app_state.SCREEN_WIDTH)) / 2;
+    play_button.pos.y = @as(f32, @floatFromInt(G.app_state.SCREEN_HEIGHT)) / 2;
     play_button.draw();
 }
 
