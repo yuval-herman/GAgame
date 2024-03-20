@@ -11,9 +11,8 @@ const assert = std.debug.assert;
 
 const EVALUATION_TICKS = 60 * 15;
 
-const TOURNAMENT_SIZE = 30;
-const MUTATION_RATE = 0.2;
-const IND_MUTATION_RATE = 0.05;
+const MUTATION_RATE = 0.3;
+const IND_MUTATION_RATE = 0.01;
 
 const POPULATION_SIZE = 1000;
 const HOF_SIZE = 1;
@@ -63,8 +62,18 @@ pub fn main() !void {
             avg_nodes /= pop.len;
 
             const avg = G.app_state.best_history.items[gen].getAvgPos();
-            std.debug.print("gen: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{ gen, avg[0], avg[1], pop[0].fitness, avg_edges, avg_nodes });
+            std.debug.print("gen: {}, t_size: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{
+                gen,
+                G.app_state.tournament_size,
+                avg[0],
+                avg[1],
+                pop[0].fitness,
+                avg_edges,
+                avg_nodes,
+            });
             gen += 1;
+
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, gen * gen / POPULATION_SIZE));
         }
         if (gen != 0) {
             try Player.draw();
@@ -78,11 +87,13 @@ fn creatureComp(context: void, a: Creature, b: Creature) bool {
 }
 
 fn select(pop: []Creature) [2]Creature {
-    var participants: [TOURNAMENT_SIZE]usize = undefined;
-    for (&participants) |*participant| {
+    var max_participants: [POPULATION_SIZE]usize = undefined;
+    const participants = max_participants[0..G.app_state.tournament_size];
+
+    for (participants) |*participant| {
         participant.* = random.intRangeLessThan(usize, 0, pop.len);
     }
-    std.mem.sort(usize, &participants, {}, std.sort.desc(usize));
+    std.mem.sort(usize, participants, {}, std.sort.desc(usize));
     return .{ pop[participants[0]], pop[participants[1]] };
 }
 

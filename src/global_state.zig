@@ -1,7 +1,7 @@
 const std = @import("std");
 const Creature = @import("creature.zig").Creature;
 
-pub const RELAX_GRAPH_ITERS = 100;
+pub const RELAX_GRAPH_ITERS = 10;
 
 pub const GlobalState = struct {
     best_history: std.ArrayList(Creature),
@@ -11,6 +11,7 @@ pub const GlobalState = struct {
     DAMPING: @Vector(2, f32),
     GRAVITY: f32,
     fps: c_int,
+    tournament_size: usize,
 };
 
 var buf: [1000000]u8 = undefined;
@@ -24,4 +25,5 @@ pub var app_state = GlobalState{
     .DAMPING = @splat(0.9),
     .GRAVITY = 1,
     .fps = 30,
+    .tournament_size = 30,
 };
