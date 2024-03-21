@@ -93,7 +93,7 @@ pub fn main() !void {
                     if (all_equal) {
                         G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size - 2));
                     } else {
-                        G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 5));
+                        G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 2));
                     }
                 }
                 try ui.Player.draw();
