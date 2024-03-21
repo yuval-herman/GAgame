@@ -37,6 +37,7 @@ pub fn draw() void {
     play_button.pos.x = f_scr_wid / 2;
     play_button.pos.y = f_scr_hig / 2;
     play_button.draw();
+    if (r.IsKeyPressed(r.KEY_SPACE)) click_play();
 }
 
 fn click_play() void {
