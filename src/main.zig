@@ -1,4 +1,6 @@
 const std = @import("std");
+const Thread = std.Thread;
+
 const ui = @import("ui.zig");
 
 const r = @import("cHeaders.zig").raylib;
@@ -19,10 +21,15 @@ const HOF_SIZE = 1;
 var prng = std.Random.DefaultPrng.init(0);
 const random = prng.random();
 
+var waitGroup = Thread.WaitGroup{};
+var pool: Thread.Pool = undefined;
+
 pub fn main() !void {
     assert(HOF_SIZE < POPULATION_SIZE);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
+    try pool.init(.{ .allocator = allocator });
+    defer pool.deinit();
 
     r.SetTraceLogLevel(r.LOG_WARNING);
     r.SetConfigFlags(r.FLAG_MSAA_4X_HINT);
@@ -132,11 +139,19 @@ fn evolve(pop: []Creature) !Creature {
         c.deinit();
     }
     @memcpy(pop[HOF_SIZE..], newPop[0 .. pop.len - HOF_SIZE]);
-
+    waitGroup.reset();
     for (pop[HOF_SIZE..]) |*c| {
-        c.evaluate(EVALUATION_TICKS, G.app_state.GRAVITY, G.RELAX_GRAPH_ITERS, G.app_state.GROUND_LEVEL, G.app_state.DAMPING);
+        waitGroup.start();
+        try pool.spawn(workerEvaluate, .{ c, &waitGroup });
     }
+    pool.waitAndWork(&waitGroup);
+
     std.mem.sort(Creature, pop, {}, creatureComp);
 
     return try pop[0].clone();
+}
+
+fn workerEvaluate(c: *Creature, wg: *Thread.WaitGroup) void {
+    defer wg.finish();
+    c.evaluate(EVALUATION_TICKS, G.app_state.GRAVITY, G.RELAX_GRAPH_ITERS, G.app_state.GROUND_LEVEL, G.app_state.DAMPING);
 }
