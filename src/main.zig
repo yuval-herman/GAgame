@@ -24,6 +24,8 @@ const random = prng.random();
 var waitGroup = Thread.WaitGroup{};
 var pool: Thread.Pool = undefined;
 
+var evolve_toggle = Thread.ResetEvent{};
+
 pub fn main() !void {
     assert(HOF_SIZE < POPULATION_SIZE);
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -49,7 +51,7 @@ pub fn main() !void {
 
     try G.app_state.best_history.append(try evolve(&pop));
     gen += 1;
-    var evolve_toggle = false;
+
     while (!r.WindowShouldClose()) // Detect window close button or ESC key
     {
         r.BeginDrawing();
@@ -61,52 +63,61 @@ pub fn main() !void {
             },
             .player => {
                 if (r.IsKeyPressed(r.KEY_SPACE)) {
-                    evolve_toggle = !evolve_toggle;
-                }
-                if (evolve_toggle) {
-                    try G.app_state.best_history.append(try evolve(&pop));
-
-                    var avg_edges: usize = 0;
-                    var avg_nodes: usize = 0;
-                    for (pop) |cs| {
-                        avg_edges += cs.edges.items.len;
-                        avg_nodes += cs.nodes.items.len;
-                    }
-                    avg_edges /= pop.len;
-                    avg_nodes /= pop.len;
-
-                    const avg = G.app_state.best_history.items[gen].getAvgPos();
-                    std.debug.print("gen: {}, t_size: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{
-                        gen,
-                        G.app_state.tournament_size,
-                        avg[0],
-                        avg[1],
-                        pop[0].fitness,
-                        avg_edges,
-                        avg_nodes,
-                    });
-                    gen += 1;
-
-                    var bests = G.app_state.best_history.items;
-                    if (bests.len > 10) {
-                        bests = bests[bests.len - 10 ..];
-                    }
-
-                    const first_fitness = bests[0].fitness;
-                    const all_equal = for (bests) |b|
-                        (if (b.fitness != first_fitness) break false)
-                    else
-                        true;
-                    if (all_equal) {
-                        G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size - 2));
+                    if (evolve_toggle.isSet()) {
+                        evolve_toggle.reset();
                     } else {
-                        G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 2));
+                        evolve_toggle.set();
+                        var thread = try Thread.spawn(.{ .allocator = allocator }, workerEvolve, .{ &pop, &gen });
+                        thread.detach();
                     }
                 }
                 try ui.Player.draw();
             },
         }
         r.EndDrawing();
+    }
+}
+
+fn workerEvolve(pop: []Creature, gen: *usize) !void {
+    while (evolve_toggle.isSet()) {
+        try G.app_state.best_history.append(try evolve(pop));
+
+        var avg_edges: usize = 0;
+        var avg_nodes: usize = 0;
+        for (pop) |cs| {
+            avg_edges += cs.edges.items.len;
+            avg_nodes += cs.nodes.items.len;
+        }
+        avg_edges /= pop.len;
+        avg_nodes /= pop.len;
+
+        const avg = G.app_state.best_history.items[gen.*].getAvgPos();
+        std.debug.print("gen: {}, t_size: {}, best avg: ({d:.2}, {d:.2}), best fitness:{d:.2}, edges: {}, nodes: {}\n", .{
+            gen.*,
+            G.app_state.tournament_size,
+            avg[0],
+            avg[1],
+            pop[0].fitness,
+            avg_edges,
+            avg_nodes,
+        });
+        gen.* += 1;
+
+        var bests = G.app_state.best_history.items;
+        if (bests.len > 10) {
+            bests = bests[bests.len - 10 ..];
+        }
+
+        const first_fitness = bests[0].fitness;
+        const all_equal = for (bests) |b|
+            (if (b.fitness != first_fitness) break false)
+        else
+            true;
+        if (all_equal) {
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size - 2));
+        } else {
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 2));
+        }
     }
 }
 
