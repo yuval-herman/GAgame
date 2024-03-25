@@ -16,7 +16,7 @@ fn creatureDraw(c: Creature) void {
         r.DrawLineEx(
             utils.v2FromVector(c.nodes.items[edge.nodes[0]].pos),
             utils.v2FromVector(c.nodes.items[edge.nodes[1]].pos),
-            if (edge.is_long) 20 else 10,
+            10, //if (edge.is_long) 20 else
             r.ColorAlpha(r.BLACK, edge.strength / max_strength),
         );
     }
