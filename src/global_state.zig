@@ -30,7 +30,7 @@ pub var app_state = GlobalState{
     .GROUND_LEVEL = 0,
     .DAMPING = @splat(0.9),
     .GRAVITY = 1,
-    .fps = 30,
-    .tournament_size = std.math.pow(usize, 2, 5),
+    .fps = 60,
+    .tournament_size = 500,
     .screen = Screens.configs,
 };

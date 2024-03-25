@@ -10,9 +10,9 @@ const G = @import("global_state.zig");
 
 const assert = std.debug.assert;
 
-const EVALUATION_TICKS = 60 * 15;
+const EVALUATION_TICKS = 60 * 10;
 
-const MUTATION_RATE = 0.3;
+const MUTATION_RATE = 0.25;
 const IND_MUTATION_RATE = 0.01;
 
 const POPULATION_SIZE = 1000;
@@ -114,9 +114,9 @@ fn workerEvolve(pop: []Creature, gen: *usize) !void {
         else
             true;
         if (all_equal) {
-            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, G.app_state.tournament_size - 1));
+            G.app_state.tournament_size = @max(@max(2, POPULATION_SIZE / 10), G.app_state.tournament_size - 1);
         } else {
-            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, G.app_state.tournament_size + 5));
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, G.app_state.tournament_size + 5);
         }
     }
 }
