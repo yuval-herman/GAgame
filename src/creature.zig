@@ -30,11 +30,14 @@ const random_values = struct {
     fn short_length() f32 {
         return long_length();
     }
-    fn long_time() u8 {
-        return random.intRangeAtMost(u8, 1, std.math.maxInt(u8));
+    fn bias() f32 {
+        return random.float(f32);
     }
-    fn short_time() u8 {
-        return long_time();
+    fn weight() @Vector(2, f32) {
+        return .{ random.float(f32), random.float(f32) };
+    }
+    fn weights(weights_slice: []@Vector(2, f32)) void {
+        for (weights_slice) |*w| w.* = weight();
     }
 };
 
@@ -56,20 +59,28 @@ const Muscle = struct {
     strength: f32,
     long_length: f32,
     short_length: f32,
-    long_time: u8,
-    short_time: u8,
-    is_long: bool = false,
+    bias: f32,
+    weights: std.ArrayList(@Vector(2, f32)),
+    fn think(self: Muscle, nodes: []const Node, avg_pos: @Vector(2, f32)) bool {
+        if (self.weights.items.len == 0) return false;
+        var sum: f32 = 0;
+        for (nodes, 0..) |node, i| {
+            const v = (node.pos - avg_pos) * self.weights.items[i];
+            sum += v[0];
+            sum += v[1];
+        }
+        sum += self.bias;
+        return sum <= 0;
+    }
 };
 
 pub const Creature = struct {
     nodes: ArrayList(Node),
     edges: ArrayList(Muscle),
-    clock: u8 = 0,
     fitness: f64 = 0,
     seed: u64,
 
     pub fn tick(self: *Creature, ground_level: f32, gravity: f32, damping: @Vector(2, f32)) void {
-        self.clock +%= 1;
         for (self.nodes.items) |*node| {
             node.pos += node.velocity;
             node.velocity *= damping;
@@ -84,16 +95,15 @@ pub const Creature = struct {
             }
         }
 
+        const avg_pos = self.getAvgPos();
         for (self.edges.items) |*edge| {
-            if (self.clock % (if (edge.is_long) edge.long_time else edge.short_time) == 0) edge.is_long = !edge.is_long;
-
             const node1 = &self.nodes.items[edge.nodes[0]];
             const node2 = &self.nodes.items[edge.nodes[1]];
 
             var direction_vec = node2.pos - node1.pos;
 
             const length = @sqrt(@reduce(.Add, direction_vec * direction_vec));
-            const target_length = if (edge.is_long) edge.long_length else edge.short_length;
+            const target_length = if (edge.think(self.nodes.items, avg_pos)) edge.long_length else edge.short_length;
 
             const force = edge.strength * (length - target_length);
 
@@ -109,7 +119,6 @@ pub const Creature = struct {
         for (self.nodes.items) |n| {
             avg += n.pos;
         }
-
         avg /= @splat(@floatFromInt(self.nodes.items.len));
         return avg;
     }
@@ -122,17 +131,12 @@ pub const Creature = struct {
             node.pos[0] = c_random.float(f32);
             node.pos[1] = c_random.float(f32);
         }
-        for (self.edges.items) |*edge| {
-            edge.is_long = false;
-        }
-        self.clock = 0;
+
         self.fitness = 0;
 
         for (0..relax_graph_iters) |_| {
             self.tick(99999, 0, @splat(0.8));
         }
-
-        self.clock = 0;
 
         var lowest_node = self.nodes.items[0];
         for (self.nodes.items[1..]) |node| {
@@ -177,9 +181,22 @@ pub const Creature = struct {
             try edges.appendSlice(self.edges.items[crossover_point..edges_amount]);
         }
 
+        // we `weights.clone` because edges themselves are being compied in `edges.appendSlice` but inner pointers
+        // such as the weights do not get copied.
+        for (edges.items) |*e| {
+            e.weights = try e.weights.clone();
+        }
+
         // verify no edge points to a nonexisting node
         var i: usize = 0;
         while (i < edges.items.len) {
+            const diff = @as(i64, @intCast(nodes.items.len)) - @as(i64, @intCast(edges.items[i].weights.items.len));
+            if (diff >= 1) {
+                for (try edges.items[i].weights.addManyAsSlice(@intCast(diff))) |*w| w.* = random_values.weight();
+            } else if (diff < 1) {
+                try edges.items[i].weights.resize(nodes.items.len);
+            }
+
             for (edges.items[i].nodes) |n| {
                 if (n >= nodes.items.len) {
                     _ = edges.swapRemove(i);
@@ -200,8 +217,9 @@ pub const Creature = struct {
             if (random.float(f32) < ind_mut_chance) e.long_length = random_values.long_length();
             if (random.float(f32) < ind_mut_chance) e.short_length = random_values.short_length();
             if (random.float(f32) < ind_mut_chance) e.strength = random_values.strength();
-            if (random.float(f32) < ind_mut_chance) e.long_time = random_values.long_time();
-            if (random.float(f32) < ind_mut_chance) e.short_time = random_values.short_time();
+            for (e.weights.items) |*w| {
+                if (random.float(f32) < ind_mut_chance) w.* = random_values.weight();
+            }
         }
 
         if (random.float(f32) < ind_mut_chance / 10) {
@@ -209,10 +227,14 @@ pub const Creature = struct {
                 // remove node
                 if (self.nodes.items.len > 0) {
                     const node_idx = random.uintLessThan(usize, self.nodes.items.len);
+                    // truncate the weights array.
+                    // TODO investigate if worth to remove specifically to weight associated with the removed node.
                     _ = self.nodes.swapRemove(node_idx);
+
                     // verify no edge points to the removed node and repoint edges to the
                     // last node that was swapped.
                     var i: usize = 0;
+                    _ = self.edges.items[i].weights.pop();
                     while (i < self.edges.items.len) {
                         for (&self.edges.items[i].nodes) |*n| {
                             if (n.* == node_idx) {
@@ -230,18 +252,16 @@ pub const Creature = struct {
                     .elasticity = random_values.elasticity(),
                     .friction = random_values.friction(),
                 });
+                for (self.edges.items) |*e| {
+                    try e.weights.append(random_values.weight());
+                }
                 if (self.nodes.items.len > 1) {
-                    try self.edges.append(.{
-                        .long_length = random_values.long_length(),
-                        .short_length = random_values.short_length(),
-                        .strength = random_values.strength(),
-                        .long_time = random_values.long_time(),
-                        .short_time = random_values.short_time(),
-                        .nodes = .{
-                            random.uintLessThan(usize, self.nodes.items.len - 1),
-                            self.nodes.items.len - 1,
-                        },
-                    });
+                    try self.edges.append(try makeEdge(
+                        random.uintLessThan(usize, self.nodes.items.len - 1),
+                        self.nodes.items.len - 1,
+                        self.nodes.items.len,
+                        self.edges.allocator,
+                    ));
                 }
             }
         }
@@ -258,47 +278,10 @@ pub const Creature = struct {
                     const a = random.uintLessThan(usize, self.nodes.items.len);
                     var b = random.uintLessThan(usize, self.nodes.items.len);
                     while (b == a) b = random.uintLessThan(usize, self.nodes.items.len);
-                    try self.edges.append(.{
-                        .long_length = random_values.long_length(),
-                        .short_length = random_values.short_length(),
-                        .strength = random_values.strength(),
-                        .long_time = random_values.long_time(),
-                        .short_time = random_values.short_time(),
-                        .nodes = .{ a, b },
-                    });
+                    try self.edges.append(try makeEdge(a, b, self.nodes.items.len, self.edges.allocator));
                 }
             }
         }
-    }
-
-    pub fn createTest(node_amount: usize, ground_level: f32, allocator: std.mem.Allocator) !Creature {
-        var nodes = try ArrayList(Node).initCapacity(allocator, node_amount);
-
-        for (0..node_amount) |i| {
-            try nodes.append(Node{
-                .pos = .{
-                    .x = @floatFromInt((i % 2) * 100),
-                    .y = ground_level - 10 - 50 * @as(f32, @floatFromInt(i / 2)),
-                },
-                .elasticity = 0.5,
-                .friction = 0.5,
-            });
-        }
-        var edges = try ArrayList(Muscle).initCapacity(allocator, (node_amount * (node_amount - 1) / 2));
-
-        for (0..nodes.items.len) |i| {
-            for (i + 1..nodes.items.len) |j| {
-                try edges.append(Muscle{
-                    .nodes = .{ i, j },
-                    .long_length = 200,
-                    .short_length = 50,
-                    .strength = 50,
-                    .switch_at = 60 * 2,
-                });
-            }
-        }
-
-        return Creature{ .nodes = nodes, .edges = edges };
     }
 
     pub fn createRandom(node_amount: usize, connection_chance: f32, allocator: std.mem.Allocator) !Creature {
@@ -317,16 +300,7 @@ pub const Creature = struct {
         for (0..nodes.items.len) |i| {
             for (i + 1..nodes.items.len) |j| {
                 if (random.float(f32) < connection_chance) {
-                    const n1: f32 = random_values.long_length();
-                    const n2: f32 = random_values.short_length();
-                    try edges.append(Muscle{
-                        .nodes = .{ i, j },
-                        .long_length = @max(n1, n2),
-                        .short_length = @min(n1, n2),
-                        .strength = random_values.strength(),
-                        .long_time = random_values.long_time(),
-                        .short_time = random_values.short_time(),
-                    });
+                    try edges.append(try makeEdge(i, j, nodes.items.len, allocator));
                 }
             }
         }
@@ -334,6 +308,9 @@ pub const Creature = struct {
     }
 
     pub fn deinit(self: *Creature) void {
+        for (self.edges.items) |*e| {
+            e.weights.deinit();
+        }
         self.edges.deinit();
         self.nodes.deinit();
     }
@@ -341,7 +318,24 @@ pub const Creature = struct {
     pub fn clone(self: Creature) !Creature {
         var c = self;
         c.edges = try self.edges.clone();
+        for (c.edges.items, self.edges.items) |*c_edge, *e| {
+            c_edge.weights = try e.weights.clone();
+        }
         c.nodes = try self.nodes.clone();
         return c;
     }
 };
+
+fn makeEdge(n1: usize, n2: usize, node_amount: usize, allocator: std.mem.Allocator) !Muscle {
+    var weights = try std.ArrayList(@Vector(2, f32)).initCapacity(allocator, node_amount);
+    weights.appendNTimesAssumeCapacity(@splat(0), node_amount);
+    random_values.weights(weights.items);
+    return Muscle{
+        .weights = weights,
+        .bias = random_values.bias(),
+        .nodes = .{ n1, n2 },
+        .long_length = random_values.long_length(),
+        .short_length = random_values.short_length(),
+        .strength = random_values.strength(),
+    };
+}
