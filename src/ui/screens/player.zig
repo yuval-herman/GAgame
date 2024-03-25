@@ -13,11 +13,12 @@ var textBuffer: [10000]u8 = undefined;
 
 fn creatureDraw(c: Creature) void {
     for (c.edges.items) |edge| {
+        const min_line_strength = 0.1;
         r.DrawLineEx(
             utils.v2FromVector(c.nodes.items[edge.nodes[0]].pos),
             utils.v2FromVector(c.nodes.items[edge.nodes[1]].pos),
             10, //if (edge.is_long) 20 else
-            r.ColorAlpha(r.BLACK, edge.strength / max_strength),
+            r.ColorAlpha(r.BLACK, (1 - min_line_strength) * edge.strength / max_strength + min_line_strength),
         );
     }
     for (c.nodes.items) |node| {
