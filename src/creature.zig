@@ -146,7 +146,7 @@ pub const Creature = struct {
     }
 
     pub fn evaluate(self: *Creature, ticks: u16, gravity: f32, relax_graph_iters: usize, ground_level: f32, damping: @Vector(2, f32)) void {
-        self.resetValues(gravity, relax_graph_iters);
+        self.resetValues(ground_level, relax_graph_iters);
         for (0..ticks) |_| {
             self.tick(ground_level, gravity, damping);
         }
