@@ -114,9 +114,9 @@ fn workerEvolve(pop: []Creature, gen: *usize) !void {
         else
             true;
         if (all_equal) {
-            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size - 2));
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, G.app_state.tournament_size - 1));
         } else {
-            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 100, G.app_state.tournament_size + 2));
+            G.app_state.tournament_size = @min(POPULATION_SIZE / 2, @max(POPULATION_SIZE / 10, G.app_state.tournament_size + 5));
         }
     }
 }
