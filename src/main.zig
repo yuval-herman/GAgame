@@ -10,12 +10,12 @@ const G = @import("global_state.zig");
 
 const assert = std.debug.assert;
 
-const EVALUATION_TICKS = 60 * 30;
+const EVALUATION_TICKS = 60 * 15;
 
-const MUTATION_RATE = 0.25;
-const IND_MUTATION_RATE = 0.02;
+const MUTATION_RATE = 0.3;
+const IND_MUTATION_RATE = 0.01;
 
-const POPULATION_SIZE = 1000;
+const POPULATION_SIZE = 2000;
 const HOF_SIZE = 1;
 
 var prng = std.Random.DefaultPrng.init(0);
