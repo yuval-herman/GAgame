@@ -45,6 +45,13 @@ pub fn draw() !void {
         }
         show_all = !show_all;
     }
+    if (r.IsKeyPressed(r.KEY_ENTER)) {
+        std.debug.print("\n\n", .{});
+        for (current_c.edges.items, 0..) |e, i| {
+            std.debug.print("edge {}: {d}\n\n", .{ i, e.weights.items });
+        }
+        std.debug.print("\n\n", .{});
+    }
     if (r.IsKeyDown(r.KEY_RIGHT) and generation < G.app_state.best_history.items.len - 1) {
         generation += 1;
         changeC = true;
