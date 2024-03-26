@@ -218,7 +218,7 @@ pub const Creature = struct {
             if (random.float(f32) < ind_mut_chance) e.short_length = random_values.short_length();
             if (random.float(f32) < ind_mut_chance) e.strength = random_values.strength();
             for (e.weights.items) |*w| {
-                if (random.float(f32) < ind_mut_chance) w.* = random_values.weight();
+                if (random.float(f32) < ind_mut_chance / 10) w.* = random_values.weight();
             }
         }
 

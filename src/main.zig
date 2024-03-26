@@ -10,10 +10,10 @@ const G = @import("global_state.zig");
 
 const assert = std.debug.assert;
 
-const EVALUATION_TICKS = 60 * 10;
+const EVALUATION_TICKS = 60 * 30;
 
 const MUTATION_RATE = 0.25;
-const IND_MUTATION_RATE = 0.01;
+const IND_MUTATION_RATE = 0.02;
 
 const POPULATION_SIZE = 1000;
 const HOF_SIZE = 1;
