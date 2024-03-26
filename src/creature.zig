@@ -34,7 +34,7 @@ const random_values = struct {
         return random.float(f32);
     }
     fn weight() @Vector(2, f32) {
-        return .{ random.float(f32), random.float(f32) };
+        return .{ bias(), bias() };
     }
     fn weights(weights_slice: []@Vector(2, f32)) void {
         for (weights_slice) |*w| w.* = weight();
@@ -61,11 +61,13 @@ const Muscle = struct {
     short_length: f32,
     bias: f32,
     weights: std.ArrayList(@Vector(2, f32)),
-    fn think(self: Muscle, nodes: []const Node, avg_pos: @Vector(2, f32)) bool {
+    fn think(self: Muscle, nodes: []const Node, avg_x: f32) bool {
         if (self.weights.items.len == 0) return false;
         var sum: f32 = 0;
         for (nodes, 0..) |node, i| {
-            const v = (node.pos - avg_pos) * self.weights.items[i];
+            var v = node.pos;
+            v[0] -= avg_x;
+            v *= self.weights.items[i];
             sum += v[0];
             sum += v[1];
         }
@@ -95,7 +97,12 @@ pub const Creature = struct {
             }
         }
 
-        const avg_pos = self.getAvgPos();
+        var avg_x: f32 = 0;
+        for (self.nodes.items) |n| {
+            avg_x += n.pos[0];
+        }
+        avg_x /= @floatFromInt(self.nodes.items.len);
+
         for (self.edges.items) |*edge| {
             const node1 = &self.nodes.items[edge.nodes[0]];
             const node2 = &self.nodes.items[edge.nodes[1]];
@@ -103,7 +110,7 @@ pub const Creature = struct {
             var direction_vec = node2.pos - node1.pos;
 
             const length = @sqrt(@reduce(.Add, direction_vec * direction_vec));
-            const target_length = if (edge.think(self.nodes.items, avg_pos)) edge.long_length else edge.short_length;
+            const target_length = if (edge.think(self.nodes.items, avg_x)) edge.long_length else edge.short_length;
 
             const force = edge.strength * (length - target_length);
 
@@ -217,9 +224,8 @@ pub const Creature = struct {
             if (random.float(f32) < ind_mut_chance) e.long_length = random_values.long_length();
             if (random.float(f32) < ind_mut_chance) e.short_length = random_values.short_length();
             if (random.float(f32) < ind_mut_chance) e.strength = random_values.strength();
-            for (e.weights.items) |*w| {
-                if (random.float(f32) < ind_mut_chance / 10) w.* = random_values.weight();
-            }
+            if (random.float(f32) < ind_mut_chance) e.weights.items[random.uintLessThan(usize, e.weights.items.len)] = random_values.weight();
+            if (random.float(f32) < ind_mut_chance) e.bias = random_values.bias();
         }
 
         if (random.float(f32) < ind_mut_chance / 10) {
